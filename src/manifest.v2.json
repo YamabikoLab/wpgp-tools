@@ -4,6 +4,7 @@
 	"version":"2.1.1",
 	"description":"Enhanced Translation Tools for translate.w.org",
 	"web_accessible_resources": [
+		"js/wpgpt-checks-ja.js",
 		"js/wpgpt-checks.js",
 		"js/wpgpt-settings.js",
 		"js/wpgpt-functions.js",
