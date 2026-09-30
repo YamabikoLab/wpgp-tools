@@ -43,7 +43,7 @@ function wpgpt_check_japanese_spacing( results, translated ) {
 }
 
 function wpgpt_check_japanese_sorry( results, original, translated ) {
-	if ( ! /\\bSorry\\b/i.test( original ) || /\\bSorry\\b/i.test( translated ) ) {
+	if ( ! /(^|\\W)Sorry(\\W|$)/i.test( original ) || /(^|\\W)Sorry(\\W|$)/i.test( translated ) ) {
 		return;
 	}
 
