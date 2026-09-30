@@ -77,6 +77,12 @@ const wpgpt_settings = {
 		'setting_type':   5,
 		'parent_setting': 'locale_checks',
 	},
+	'ja_checks': {
+		'desc':           'Japanese checks',
+		'state':          'enabled',
+		'setting_type':   2,
+		'parent_setting': 'locale_checks',
+	},
 	'ro_checks': {
 		'desc':           'Romanian checks',
 		'state':          'disabled',
