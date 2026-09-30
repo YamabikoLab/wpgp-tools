@@ -14,7 +14,18 @@ const wpgpt_assets = document.querySelector( '#wpgpt_assets' );
 const wpgpt_warning_icon = wpgpt_assets?.dataset?.warning ?? wpgpt_us_assets?.wpgpt_warning_icon;
 const wpgpt_notice_icon = wpgpt_assets?.dataset?.notice ?? wpgpt_us_assets?.wpgpt_notice_icon;
 
-if ( typeof $gp_editor_options !== 'undefined' && ( 'enabled' === wpgpt_settings.checks.state || 'enabled' === wpgpt_settings.ro_checks.state ) ) {
+if (
+	typeof $gp_editor_options !== 'undefined' &&
+	(
+		'enabled' === wpgpt_settings.checks.state ||
+		'enabled' === wpgpt_settings.ro_checks.state ||
+		(
+			'enabled' === wpgpt_settings.ja_checks.state &&
+			typeof wpgpt_is_japanese_locale === 'function' &&
+			wpgpt_is_japanese_locale()
+		)
+	)
+) {
 	wpgpt_check_all_translations();
 	wpgpt_filters();
 	wpgpt_mutations();
@@ -280,6 +291,10 @@ function wpgpt_run_checks( original, translated, translation_e_id = false ) {
 	wpgpt_push1( results.warning, wpgpt_check_placeholders( original, translated ) );
 	( 'enabled' === wpgpt_settings.checks.state ) && wpgpt_run_general_checks( results, original, translated, translation_e_id );
 	( 'enabled' === wpgpt_settings.ro_checks.state ) && wpgpt_run_romanian_checks( results, translated );
+	(
+		'enabled' === wpgpt_settings.ja_checks.state &&
+		typeof wpgpt_run_japanese_checks === 'function'
+	) && wpgpt_run_japanese_checks( results, original, translated, translation_e_id );
 	return results;
 }
 
