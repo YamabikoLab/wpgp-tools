@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Japanese Checks Playground</title>
+	<style>
+		body {
+			font-family: system-ui, sans-serif;
+			max-width: 900px;
+			margin: 40px auto;
+			padding: 0 20px;
+			line-height: 1.5;
+		}
+		textarea {
+			box-sizing: border-box;
+			width: 100%;
+			min-height: 110px;
+			margin: 6px 0 18px;
+			padding: 10px;
+			font: inherit;
+		}
+		button {
+			margin: 0 8px 8px 0;
+			padding: 8px 12px;
+		}
+		#results {
+			margin-top: 24px;
+			padding: 16px;
+			border: 1px solid #ccc;
+		}
+		.pass {
+			font-weight: 600;
+		}
+		code {
+			background: #f2f2f2;
+			padding: 2px 4px;
+		}
+	</style>
+</head>
+<body>
+	<h1>Japanese Checks Playground</h1>
+	<p>
+		This local-only page runs the production
+		<code>src/js/wpgpt-checks-ja.js</code> rule functions directly.
+		It does not connect to translate.wordpress.org and cannot submit translations.
+	</p>
+
+	<div>
+		<button type="button" data-preset="punctuation">1-1 Punctuation</button>
+		<button type="button" data-preset="spacing">1-4 Spacing</button>
+		<button type="button" data-preset="sorry">3-4 Sorry</button>
+	</div>
+
+	<label for="original"><strong>Original</strong></label>
+	<textarea id="original"></textarea>
+
+	<label for="translated"><strong>Translation</strong></label>
+	<textarea id="translated"></textarea>
+
+	<button type="button" id="run-checks">Run Japanese checks</button>
+
+	<section id="results" aria-live="polite">
+		<p>Run a check to see results.</p>
+	</section>
+
+	<script src="../../../src/js/wpgpt-checks-ja.js"></script>
+	<script src="./playground.js"></script>
+</body>
+</html>
