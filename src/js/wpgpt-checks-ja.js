@@ -28,7 +28,7 @@ function wpgpt_check_japanese_punctuation( results, translated ) {
 
 function wpgpt_check_japanese_spacing( results, translated ) {
 	const japanese = '[一-龯ぁ-んァ-ヶー]';
-	const ascii = '[A-Za-z0-9!"#$%&\\'()*+,\\-./:;<=>?@\\[\\]\\\\^_`{|}~]';
+	const ascii = '[!-~]';
 	const pattern = new RegExp( `(?:${japanese} +${ascii}|${ascii} +${japanese})`, 'g' );
 	const matches = translated.match( pattern ) || [];
 
