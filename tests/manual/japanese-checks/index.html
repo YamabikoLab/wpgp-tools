@@ -45,21 +45,8 @@
 	<script>
 		localStorage.setItem( 'wpgpt-gd-unified', 'playground' );
 		window.wpgpt_us_assets = { wpgpt_warning_icon: '', wpgpt_notice_icon: '' };
-		window.$wpgpt_createElement = function( tag, attributes = {}, text = '' ) {
-			const element = document.createElement( tag );
-			Object.entries( attributes ).forEach( ( entry ) => {
-				const [ key, value ] = entry;
-				if ( 'checked' === key ) {
-					element.checked = true;
-				} else {
-					element.setAttribute( key, value );
-				}
-			} );
-			if ( text !== '' ) element.textContent = text;
-			return element;
-		};
-		window.$wpgpt_addElement = function() {};
 	</script>
+	<script src="../../../src/js/wpgpt-functions.js"></script>
 	<script src="../../../src/js/wpgpt-settings.js"></script>
 	<script src="../../../src/js/wpgpt-checks.js"></script>
 	<script src="./playground.js"></script>
