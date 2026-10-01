@@ -14,7 +14,14 @@ const wpgpt_assets = document.querySelector( '#wpgpt_assets' );
 const wpgpt_warning_icon = wpgpt_assets?.dataset?.warning ?? wpgpt_us_assets?.wpgpt_warning_icon;
 const wpgpt_notice_icon = wpgpt_assets?.dataset?.notice ?? wpgpt_us_assets?.wpgpt_notice_icon;
 
-if ( typeof $gp_editor_options !== 'undefined' && ( 'enabled' === wpgpt_settings.checks.state || 'enabled' === wpgpt_settings.ro_checks.state ) ) {
+if (
+	typeof $gp_editor_options !== 'undefined' &&
+	(
+		'enabled' === wpgpt_settings.checks.state ||
+		'enabled' === wpgpt_settings.ro_checks.state ||
+		( 'enabled' === wpgpt_settings.ja_checks.state && wpgpt_is_japanese_locale() )
+	)
+) {
 	wpgpt_check_all_translations();
 	wpgpt_filters();
 	wpgpt_mutations();
@@ -191,7 +198,7 @@ function prepare_checks( thisTranslation, translation_e_id, highlight_spaces ) {
 	}
 	let check_results;
 	translated_forms.forEach( ( translated_form, translated_form_i ) => {
-		check_results = wpgpt_run_checks( original_forms[ original_form_i ], translated_form, highlight_spaces ? translation_e_id : false );
+		check_results = wpgpt_run_checks( original_forms[ original_form_i ], translated_form, highlight_spaces ? translation_e_id : false, original_forms[ 0 ] || original_forms[ original_form_i ] );
 		const warnings_list = document.createElement( 'div' );
 		const notices_list = warnings_list.cloneNode( true );
 		warnings_list.classList.add( 'wpgpt-warnings-list' );
@@ -270,7 +277,7 @@ function prepare_checks( thisTranslation, translation_e_id, highlight_spaces ) {
 	}
 }
 
-function wpgpt_run_checks( original, translated, translation_e_id = false ) {
+function wpgpt_run_checks( original, translated, translation_e_id = false, singular_original = original ) {
 	if ( '' === translated ) {
 		const msg = wpgpt_li.cloneNode( true );
 		msg.textContent = 'Empty translation!';
@@ -280,6 +287,7 @@ function wpgpt_run_checks( original, translated, translation_e_id = false ) {
 	wpgpt_push1( results.warning, wpgpt_check_placeholders( original, translated ) );
 	( 'enabled' === wpgpt_settings.checks.state ) && wpgpt_run_general_checks( results, original, translated, translation_e_id );
 	( 'enabled' === wpgpt_settings.ro_checks.state ) && wpgpt_run_romanian_checks( results, translated );
+	( 'enabled' === wpgpt_settings.ja_checks.state ) && wpgpt_run_japanese_checks( results, singular_original, translated );
 	return results;
 }
 
@@ -339,6 +347,414 @@ function wpgpt_run_general_checks( results, original, translated, translation_e_
 		wpgpt_push1( results[ 'notice' ], tag_spaces.msg );
 		tag_spaces.arr.length && wpgpt_push( results.highlight_me, tag_spaces.arr );
 	}
+}
+
+
+const WPGPT_JA_STYLE_GUIDE = {
+	punctuation: '1-1 日本語の句読点',
+	half_width: '1-2 英数字・記号の半角表記',
+	half_full_spacing: '1-4 半角文字と全角文字の間のスペース',
+	parentheses: '1-5 半角丸括弧と前後スペース',
+	inner_parentheses_spacing: '1-6 丸括弧内側の不要スペース',
+	period_inside_parentheses: '1-7 括弧内末尾の句点',
+	sentence_ending_parentheses: '1-8 文末括弧と句点の位置',
+	number_spacing: '1-9 半角数字前後の不要スペース',
+	view_expression: '3-2 「View XX」を「〜を表示 (する)」に統一',
+	not_allowed_expression: '3-3 「XX are/is not allowed to...」を「〜する権限がありません」に統一',
+	sorry_prefix: '3-4 「Sorry, ...」の Sorry を訳さない',
+	recommended_expressions: '3-6 「下さい / 全て / 既に」などの推奨表記',
+	middle_dot: '5. 中点「・」',
+};
+
+const WPGPT_JA_JAPANESE_CHARACTER = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const WPGPT_JA_ASCII_NON_DIGIT = /[\x21-\x2F\x3A-\x7E]/;
+const WPGPT_JA_NO_SPACE_PUNCTUATION = new Set( [ '『', '』', '「', '」', '。', '、' ] );
+const WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS = new Set( [ '『', '』', '「', '」', '。', '、' ] );
+const WPGPT_JA_APOLOGY_PREFIXES = [ 'すみませんが', 'すみません', '申し訳ございません', '申し訳ありません', 'ごめんなさい' ];
+
+function wpgpt_is_japanese_locale() {
+	return window.location.pathname.split( '/' ).includes( 'ja' );
+}
+
+function wpgpt_ja_protect_technical_text( text ) {
+	const protected_indexes = new Set();
+	const hidden_markup_indexes = new Set();
+	const patterns = [
+		{ pattern: /https?:\/\/[^\s]+/giu, hidden_markup: false },
+		{ pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, hidden_markup: false },
+		{ pattern: /<[^>]+>/gu, hidden_markup: true },
+		{ pattern: /\{\{\/?[A-Za-z][A-Za-z0-9_-]*\}\}/gu, hidden_markup: true },
+		{ pattern: /%(?:\d+\$)?s/gu, hidden_markup: false },
+		{ pattern: /%\([A-Za-z0-9_.-]+\)s/gu, hidden_markup: false },
+		{ pattern: /(?:[A-Za-z_][A-Za-z0-9_]*|%(?:\d+\$)?s)\(\)/gu, hidden_markup: false },
+		{ pattern: /`[^`]+`/gu, hidden_markup: false },
+		{ pattern: /(?:[A-Z]:\\\\|\/(?![A-Za-z][A-Za-z0-9_-]*>))\S+/giu, hidden_markup: false },
+	];
+
+	patterns.forEach( ( item ) => {
+		for ( const match of text.matchAll( item.pattern ) ) {
+			for ( let index = match.index; index < match.index + match[ 0 ].length; index++ ) {
+				protected_indexes.add( index );
+				item.hidden_markup && hidden_markup_indexes.add( index );
+			}
+		}
+	} );
+
+	return { protected_indexes, hidden_markup_indexes };
+}
+
+function wpgpt_ja_visible_adjacent_text( text, hidden_markup_indexes, start_index, direction, spacing_characters ) {
+	let index = start_index;
+	const spacing_indexes = [];
+	while ( index >= 0 && index < text.length ) {
+		if ( hidden_markup_indexes.has( index ) ) {
+			index += direction;
+			continue;
+		}
+		const character = text[ index ];
+		if ( spacing_characters.has( character ) ) {
+			spacing_indexes.push( index );
+			index += direction;
+			continue;
+		}
+		return { character, character_index: index, spacing_indexes };
+	}
+	return undefined;
+}
+
+function wpgpt_ja_outer_parentheses_spacing( text, hidden_markup_indexes, start_index, direction ) {
+	let index = start_index;
+	let space_count = 0;
+	while ( index >= 0 && index < text.length ) {
+		if ( hidden_markup_indexes.has( index ) ) {
+			index += direction;
+			continue;
+		}
+		const character = text[ index ];
+		if ( ' ' === character ) {
+			space_count++;
+			index += direction;
+			continue;
+		}
+		return { character, space_count };
+	}
+	return undefined;
+}
+
+function wpgpt_ja_is_numeric_full_width_punctuation( text, index ) {
+	if ( ! [ '，', '．' ].includes( text[ index ] ) ) {
+		return false;
+	}
+	const numeric_character = /[0-9０-９]/u;
+	return numeric_character.test( text[ index - 1 ] || '' ) && numeric_character.test( text[ index + 1 ] || '' );
+}
+
+function wpgpt_ja_match( start, end ) {
+	return { start, end };
+}
+
+function wpgpt_ja_finding( setting, style_guide_item, message, matches = [] ) {
+	return { setting, style_guide_item, message, matches };
+}
+
+function wpgpt_ja_check_punctuation( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const matches = [];
+	for ( let index = 0; index < translated.length; index++ ) {
+		const character = translated[ index ];
+		if (
+			! protected_indexes.has( index ) &&
+			[ '，', '．', '､', '｡' ].includes( character ) &&
+			! wpgpt_ja_is_numeric_full_width_punctuation( translated, index )
+		) {
+			matches.push( wpgpt_ja_match( index, index + 1 ) );
+		}
+	}
+	return matches.length ? [ wpgpt_ja_finding( 'ja_punctuation', WPGPT_JA_STYLE_GUIDE.punctuation, '日本語の句読点は「、」「。」を使用してください', matches ) ] : [];
+}
+
+function wpgpt_ja_check_half_width( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const grouped = new Map();
+	for ( let index = 0; index < translated.length; index++ ) {
+		if ( protected_indexes.has( index ) ) continue;
+		const character = translated[ index ];
+		const code_point = character?.codePointAt( 0 );
+		if ( code_point === undefined || code_point < 0xff01 || code_point > 0xff5e ) continue;
+		if (
+			[ '（', '）' ].includes( character ) ||
+			( [ '，', '．' ].includes( character ) && ! wpgpt_ja_is_numeric_full_width_punctuation( translated, index ) )
+		) continue;
+		const expected = String.fromCodePoint( code_point - 0xfee0 );
+		const key = `${character}:${expected}`;
+		if ( ! grouped.has( key ) ) grouped.set( key, { character, expected, matches: [] } );
+		grouped.get( key ).matches.push( wpgpt_ja_match( index, index + 1 ) );
+	}
+	return Array.from( grouped.values(), ( item ) => wpgpt_ja_finding(
+		'ja_half_width',
+		WPGPT_JA_STYLE_GUIDE.half_width,
+		`「${item.character}」は半角の「${item.expected}」で表記してください`,
+		item.matches
+	) );
+}
+
+function wpgpt_ja_check_half_full_spacing( translated ) {
+	const { protected_indexes, hidden_markup_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const spacing_text = translated.replace( /%\d*\$?d/gu, ( value ) => '0'.repeat( value.length ) );
+	const spacing_characters = new Set( [ ' ', '\u00a0', '　' ] );
+	const valid_colon_spacing_characters = new Set( [ ' ', '　' ] );
+	const findings = [];
+	const boundary_matches = [];
+	let boundary_message;
+	const symbol_matches = [];
+	let unnecessary_symbol;
+	const colon_before_matches = [];
+	const colon_after_matches = [];
+
+	for ( let index = 0; index < spacing_text.length - 1; index++ ) {
+		if ( protected_indexes.has( index ) ) continue;
+		const left = spacing_text[ index ] || '';
+		let right_index = index + 1;
+		let space_count = 0;
+		let invalid_space = false;
+		while ( spacing_characters.has( spacing_text[ right_index ] || '' ) ) {
+			space_count++;
+			invalid_space ||= ' ' !== spacing_text[ right_index ];
+			right_index++;
+		}
+		if ( protected_indexes.has( right_index ) ) continue;
+		const right = spacing_text[ right_index ] || '';
+		if (
+			'(' === left || ')' === right || ')' === left || '(' === right ||
+			':' === left || ':' === right ||
+			WPGPT_JA_NO_SPACE_PUNCTUATION.has( left ) || WPGPT_JA_NO_SPACE_PUNCTUATION.has( right ) ||
+			[ ',', '.', '，', '．', '､', '｡' ].includes( left ) || [ ',', '.', '，', '．', '､', '｡' ].includes( right )
+		) continue;
+		const left_half = WPGPT_JA_ASCII_NON_DIGIT.test( left ) && ! /\d/.test( left );
+		const right_half = WPGPT_JA_ASCII_NON_DIGIT.test( right ) && ! /\d/.test( right );
+		const left_japanese = WPGPT_JA_JAPANESE_CHARACTER.test( left );
+		const right_japanese = WPGPT_JA_JAPANESE_CHARACTER.test( right );
+		if ( ( ( left_half && right_japanese ) || ( left_japanese && right_half ) ) && ( 1 !== space_count || invalid_space ) ) {
+			const message = 0 === space_count
+				? `「${left}」と「${right}」の間に半角スペースを入れてください`
+				: `「${left}」と「${right}」の間の半角スペースは1つにしてください`;
+			if ( boundary_message === undefined ) boundary_message = message;
+			if ( boundary_message === message ) boundary_matches.push( wpgpt_ja_match( index, right_index + 1 ) );
+		}
+	}
+
+	for ( let index = 0; index < translated.length; index++ ) {
+		if ( protected_indexes.has( index ) ) continue;
+		const character = translated[ index ];
+		if (
+			WPGPT_JA_NO_SPACE_PUNCTUATION.has( character ) &&
+			( spacing_characters.has( translated[ index - 1 ] || '' ) || spacing_characters.has( translated[ index + 1 ] || '' ) )
+		) {
+			if ( unnecessary_symbol === undefined ) unnecessary_symbol = character;
+			if ( unnecessary_symbol === character ) {
+				const start = spacing_characters.has( translated[ index - 1 ] || '' ) ? index - 1 : index;
+				const end = spacing_characters.has( translated[ index + 1 ] || '' ) ? index + 2 : index + 1;
+				symbol_matches.push( wpgpt_ja_match( start, end ) );
+			}
+		}
+	}
+
+	for ( let index = 0; index < translated.length; index++ ) {
+		if ( ':' !== translated[ index ] || protected_indexes.has( index ) ) continue;
+		const before = wpgpt_ja_visible_adjacent_text( translated, hidden_markup_indexes, index - 1, -1, spacing_characters );
+		const after = wpgpt_ja_visible_adjacent_text( translated, hidden_markup_indexes, index + 1, 1, spacing_characters );
+		if (
+			before && after &&
+			0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length &&
+			/\d/u.test( before.character ) && /\d/u.test( after.character )
+		) continue;
+		if ( before && before.spacing_indexes.length > 0 ) {
+			colon_before_matches.push( wpgpt_ja_match( Math.min( ...before.spacing_indexes ), index + 1 ) );
+		}
+		if ( after ) {
+			const invalid = after.spacing_indexes.some( ( spacing_index ) => ! valid_colon_spacing_characters.has( translated[ spacing_index ] || '' ) );
+			if ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) {
+				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
+			}
+		}
+	}
+
+	boundary_message && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, boundary_message, boundary_matches ) );
+	unnecessary_symbol && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, `「${unnecessary_symbol}」の前後のスペースは不要です`, symbol_matches ) );
+	colon_before_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の前のスペースは不要です', colon_before_matches ) );
+	colon_after_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の後にスペースを1つ入れてください', colon_after_matches ) );
+	return findings;
+}
+
+function wpgpt_ja_check_parentheses( translated ) {
+	const { protected_indexes, hidden_markup_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const findings = [];
+	const full_width_matches = [];
+	const outer_matches = [];
+	for ( let index = 0; index < translated.length; index++ ) {
+		if ( protected_indexes.has( index ) ) continue;
+		const character = translated[ index ];
+		if ( '（' === character || '）' === character ) full_width_matches.push( wpgpt_ja_match( index, index + 1 ) );
+		if ( '(' === character && index > 0 ) {
+			const outside = wpgpt_ja_outer_parentheses_spacing( translated, hidden_markup_indexes, index - 1, -1 );
+			if ( outside && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
+				outer_matches.push( wpgpt_ja_match( Math.max( 0, index - Math.max( 1, outside.space_count ) ), index + 1 ) );
+			}
+		}
+		if ( ')' === character && index < translated.length - 1 ) {
+			const outside = wpgpt_ja_outer_parentheses_spacing( translated, hidden_markup_indexes, index + 1, 1 );
+			if ( outside && '。' !== outside.character && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
+				outer_matches.push( wpgpt_ja_match( index, Math.min( translated.length, index + Math.max( 2, outside.space_count + 1 ) ) ) );
+			}
+		}
+	}
+	full_width_matches.length && findings.push( wpgpt_ja_finding( 'ja_parentheses', WPGPT_JA_STYLE_GUIDE.parentheses, '丸括弧は半角の「( )」を使用してください', full_width_matches ) );
+	outer_matches.length && findings.push( wpgpt_ja_finding( 'ja_parentheses', WPGPT_JA_STYLE_GUIDE.parentheses, '丸括弧の外側は半角スペース1つにしてください', outer_matches ) );
+	return findings;
+}
+
+function wpgpt_ja_check_inner_parentheses_spacing( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const matches = [];
+	for ( let index = 0; index < translated.length; index++ ) {
+		if ( protected_indexes.has( index ) ) continue;
+		if ( '(' === translated[ index ] && ! protected_indexes.has( index + 1 ) && /\s/u.test( translated[ index + 1 ] || '' ) ) matches.push( wpgpt_ja_match( index + 1, index + 2 ) );
+		if ( ')' === translated[ index ] && ! protected_indexes.has( index - 1 ) && /\s/u.test( translated[ index - 1 ] || '' ) ) matches.push( wpgpt_ja_match( index - 1, index ) );
+	}
+	return matches.length ? [ wpgpt_ja_finding( 'ja_inner_parentheses_spacing', WPGPT_JA_STYLE_GUIDE.inner_parentheses_spacing, '丸括弧の内側のスペースは削除してください', matches ) ] : [];
+}
+
+function wpgpt_ja_check_period_inside_parentheses( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const matches = [];
+	for ( let index = 0; index < translated.length - 1; index++ ) {
+		if ( '。' === translated[ index ] && ')' === translated[ index + 1 ] && ! protected_indexes.has( index ) && ! protected_indexes.has( index + 1 ) && index + 1 !== translated.length - 1 ) {
+			matches.push( wpgpt_ja_match( index, index + 1 ) );
+		}
+	}
+	return matches.length ? [ wpgpt_ja_finding( 'ja_period_inside_parentheses', WPGPT_JA_STYLE_GUIDE.period_inside_parentheses, '丸括弧内の末尾の句点は削除してください', matches ) ] : [];
+}
+
+function wpgpt_ja_check_sentence_ending_parentheses( translated ) {
+	if ( ! /。\)$/u.test( translated ) ) return [];
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const period_index = translated.length - 2;
+	const closing_index = translated.length - 1;
+	if ( protected_indexes.has( period_index ) || protected_indexes.has( closing_index ) ) return [];
+	return [ wpgpt_ja_finding( 'ja_sentence_ending_parentheses', WPGPT_JA_STYLE_GUIDE.sentence_ending_parentheses, '文末の句点は丸括弧の外に置いてください', [ wpgpt_ja_match( period_index, closing_index + 1 ) ] ) ];
+}
+
+function wpgpt_ja_check_number_spacing( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const numeric_token = '(?:\\d+|%\\d*\\$?d)';
+	const japanese = '[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}]';
+	const pattern = new RegExp( `(?:(${numeric_token}) +(${japanese})|(${japanese}) +(${numeric_token}))`, 'gu' );
+	const matches = [];
+	for ( const match of translated.matchAll( pattern ) ) {
+		const value = match[ 0 ];
+		const start = match.index;
+		const numeric = match[ 1 ] || match[ 4 ];
+		if ( ! numeric ) continue;
+		const numeric_offset = value.indexOf( numeric );
+		const numeric_start = start + numeric_offset;
+		const numeric_end = numeric_start + numeric.length;
+		if ( protected_indexes.has( numeric_start ) ) continue;
+		if ( ! numeric.startsWith( '%' ) ) {
+			const before = translated[ numeric_start - 1 ] || '';
+			const after = translated[ numeric_end ] || '';
+			if ( /[A-Za-z0-9_.-]/u.test( before ) || /[A-Za-z0-9_.-]/u.test( after ) ) continue;
+		}
+		matches.push( wpgpt_ja_match( start, start + value.length ) );
+	}
+	return matches.length ? [ wpgpt_ja_finding( 'ja_number_spacing', WPGPT_JA_STYLE_GUIDE.number_spacing, '半角数字と日本語の間のスペースは削除してください', matches ) ] : [];
+}
+
+function wpgpt_ja_check_view_expression( singular_original, translated ) {
+	if ( ! /^View\s+\S+/u.test( singular_original ) || ( /を表示(?:する)?/u.test( translated ) && ! /の表示/u.test( translated ) ) ) return [];
+	return [ wpgpt_ja_finding( 'ja_view_expression', WPGPT_JA_STYLE_GUIDE.view_expression, '「View XX」の訳し方を確認してください' ) ];
+}
+
+function wpgpt_ja_check_not_allowed_expression( singular_original, translated ) {
+	const permission_source = /\b(?:you|users?|administrators?|editors?|authors?|contributors?|subscribers?|customers?|members?)\s+(?:is|are) not allowed to\b/iu;
+	if ( ! permission_source.test( singular_original ) || /権限がありません/u.test( translated ) ) return [];
+	return [ wpgpt_ja_finding( 'ja_not_allowed_expression', WPGPT_JA_STYLE_GUIDE.not_allowed_expression, '「not allowed to ...」の訳し方を確認してください' ) ];
+}
+
+function wpgpt_ja_check_sorry_prefix( singular_original, translated ) {
+	if ( ! /^Sorry,\s*/u.test( singular_original ) ) return [];
+	const prefix = WPGPT_JA_APOLOGY_PREFIXES.find( ( candidate ) => translated.startsWith( candidate ) );
+	return prefix ? [ wpgpt_ja_finding( 'ja_sorry_prefix', WPGPT_JA_STYLE_GUIDE.sorry_prefix, '先頭の「Sorry,」に対応する謝罪表現を削除してください', [ wpgpt_ja_match( 0, prefix.length ) ] ) ] : [];
+}
+
+function wpgpt_ja_check_recommended_expressions( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const recommendations = [ [ '下さい', 'ください' ], [ '全て', 'すべて' ], [ '既に', 'すでに' ] ];
+	const findings = [];
+	recommendations.forEach( ( recommendation ) => {
+		const [ detected, expected ] = recommendation;
+		const matches = [];
+		let index = translated.indexOf( detected );
+		while ( -1 !== index ) {
+			! protected_indexes.has( index ) && matches.push( wpgpt_ja_match( index, index + detected.length ) );
+			index = translated.indexOf( detected, index + detected.length );
+		}
+		matches.length && findings.push( wpgpt_ja_finding( 'ja_recommended_expressions', WPGPT_JA_STYLE_GUIDE.recommended_expressions, `「${detected}」は「${expected}」と表記してください`, matches ) );
+	} );
+	return findings;
+}
+
+function wpgpt_ja_check_middle_dot( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const matches = [];
+	for ( let index = 0; index < translated.length; index++ ) {
+		if ( ! protected_indexes.has( index ) && [ '・', '･' ].includes( translated[ index ] ) ) matches.push( wpgpt_ja_match( index, index + 1 ) );
+	}
+	return matches.length ? [ wpgpt_ja_finding( 'ja_middle_dot', WPGPT_JA_STYLE_GUIDE.middle_dot, '中点「・」は原則使用しません。別の表現に置き換えられないか確認してください', matches ) ] : [];
+}
+
+function wpgpt_ja_safe_highlights( translated, findings ) {
+	const { hidden_markup_indexes } = wpgpt_ja_protect_technical_text( translated );
+	const highlights = [];
+	findings.forEach( ( finding ) => {
+		finding.matches.forEach( ( match ) => {
+			const value = translated.slice( match.start, match.end );
+			if ( ! value ) return;
+			for ( let index = match.start; index < match.end; index++ ) {
+				if ( hidden_markup_indexes.has( index ) ) return;
+			}
+			if ( translated.indexOf( value ) !== match.start || translated.lastIndexOf( value ) !== match.start ) return;
+			highlights.push( value );
+		} );
+	} );
+	return highlights;
+}
+
+function wpgpt_run_japanese_checks( results, singular_original, translated ) {
+	if ( ! wpgpt_is_japanese_locale() ) return;
+	const findings = [
+		...wpgpt_ja_check_punctuation( translated ),
+		...wpgpt_ja_check_half_width( translated ),
+		...wpgpt_ja_check_half_full_spacing( translated ),
+		...wpgpt_ja_check_parentheses( translated ),
+		...wpgpt_ja_check_inner_parentheses_spacing( translated ),
+		...wpgpt_ja_check_period_inside_parentheses( translated ),
+		...wpgpt_ja_check_sentence_ending_parentheses( translated ),
+		...wpgpt_ja_check_number_spacing( translated ),
+		...wpgpt_ja_check_recommended_expressions( translated ),
+		...wpgpt_ja_check_view_expression( singular_original, translated ),
+		...wpgpt_ja_check_not_allowed_expression( singular_original, translated ),
+		...wpgpt_ja_check_sorry_prefix( singular_original, translated ),
+		...wpgpt_ja_check_middle_dot( translated ),
+	];
+
+	findings.forEach( ( finding ) => {
+		const severity = wpgpt_settings[ finding.setting ].state;
+		if ( 'nothing' === severity ) return;
+		const msg = wpgpt_li.cloneNode( true );
+		msg.textContent = `${finding.style_guide_item}: ${finding.message}`;
+		wpgpt_push1( results[ severity ], msg );
+	} );
+	wpgpt_push( results.highlight_me, wpgpt_ja_safe_highlights( translated, findings.filter( ( finding ) => 'nothing' !== wpgpt_settings[ finding.setting ].state ) ) );
 }
 
 function wpgpt_run_romanian_checks( results, translated ) {
