@@ -729,8 +729,8 @@ function wpgpt_ja_safe_highlights( translated, findings ) {
 	return highlights;
 }
 
-function wpgpt_run_japanese_checks( results, singular_original, translated ) {
-	if ( ! wpgpt_is_japanese_locale() ) return;
+function wpgpt_run_japanese_checks( results, singular_original, translated, require_japanese_locale = true ) {
+	if ( require_japanese_locale && ! wpgpt_is_japanese_locale() ) return;
 	const findings = [
 		...wpgpt_ja_check_punctuation( translated ),
 		...wpgpt_ja_check_half_width( translated ),
