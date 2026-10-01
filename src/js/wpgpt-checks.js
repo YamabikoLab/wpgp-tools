@@ -14,20 +14,6 @@ const wpgpt_assets = document.querySelector( '#wpgpt_assets' );
 const wpgpt_warning_icon = wpgpt_assets?.dataset?.warning ?? wpgpt_us_assets?.wpgpt_warning_icon;
 const wpgpt_notice_icon = wpgpt_assets?.dataset?.notice ?? wpgpt_us_assets?.wpgpt_notice_icon;
 
-if (
-	typeof $gp_editor_options !== 'undefined' &&
-	(
-		'enabled' === wpgpt_settings.checks.state ||
-		'enabled' === wpgpt_settings.ro_checks.state ||
-		( 'enabled' === wpgpt_settings.ja_checks.state && wpgpt_is_japanese_locale() )
-	)
-) {
-	wpgpt_check_all_translations();
-	wpgpt_filters();
-	wpgpt_mutations();
-	wpgpt_checks_shortcuts = true;
-}
-
 let wpgpt_next_is_strict = true;
 const wpgpt_error_message = '<b>Fix warnings first!</b><br><br>Alternatively, check <br><i>Save / Approve with warnings!</i><br><br>';
 
@@ -371,6 +357,20 @@ const WPGPT_JA_ASCII_NON_DIGIT = /[\x21-\x2F\x3A-\x7E]/;
 const WPGPT_JA_NO_SPACE_PUNCTUATION = new Set( [ '『', '』', '「', '」', '。', '、' ] );
 const WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS = new Set( [ '『', '』', '「', '」', '。', '、' ] );
 const WPGPT_JA_APOLOGY_PREFIXES = [ 'すみませんが', 'すみません', '申し訳ございません', '申し訳ありません', 'ごめんなさい' ];
+
+if (
+	typeof $gp_editor_options !== 'undefined' &&
+	(
+		'enabled' === wpgpt_settings.checks.state ||
+		'enabled' === wpgpt_settings.ro_checks.state ||
+		( 'enabled' === wpgpt_settings.ja_checks.state && wpgpt_is_japanese_locale() )
+	)
+) {
+	wpgpt_check_all_translations();
+	wpgpt_filters();
+	wpgpt_mutations();
+	wpgpt_checks_shortcuts = true;
+}
 
 function wpgpt_is_japanese_locale() {
 	return window.location.pathname.split( '/' ).includes( 'ja' );
