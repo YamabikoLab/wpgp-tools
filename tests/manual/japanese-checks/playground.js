@@ -81,7 +81,7 @@ function build_preview( text, highlights ) {
 
 document.getElementById( 'run-checks' ).addEventListener( 'click', () => {
 	const results = { warning: [], notice: [], highlight_me: [] };
-	wpgpt_run_japanese_checks( results, original.value, translated.value );
+	wpgpt_run_japanese_checks( results, original.value, translated.value, false );
 
 	results_container.replaceChildren();
 	append_result_group( 'Warnings', results.warning );
