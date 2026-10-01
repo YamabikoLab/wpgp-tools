@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Japanese Checks Playground</title>
+	<style>
+		body { font-family: system-ui, sans-serif; max-width: 960px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+		textarea { box-sizing: border-box; width: 100%; min-height: 96px; margin: 6px 0 16px; padding: 10px; font: inherit; }
+		button, select { margin: 0 8px 8px 0; padding: 7px 10px; font: inherit; }
+		fieldset { margin: 0 0 20px; padding: 16px; }
+		#results { margin-top: 24px; padding: 16px; border: 1px solid #ccc; }
+		.warning { font-weight: 600; }
+		.highlight { background: #fff3a3; }
+		.preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; border: 1px solid #ddd; }
+		code { background: #f2f2f2; padding: 2px 4px; }
+	</style>
+</head>
+<body>
+	<h1>Japanese Checks Playground</h1>
+	<p>
+		This local-only page loads the production <code>wpgpt-settings.js</code> and
+		<code>wpgpt-checks.js</code>. It does not connect to translate.wordpress.org
+		and has no save, suggest, or approve action.
+	</p>
+
+	<fieldset>
+		<legend>Presets</legend>
+		<select id="preset"></select>
+		<button type="button" id="load-preset">Load preset</button>
+	</fieldset>
+
+	<label for="original"><strong>Original</strong></label>
+	<textarea id="original"></textarea>
+
+	<label for="translated"><strong>Translation</strong></label>
+	<textarea id="translated"></textarea>
+
+	<button type="button" id="run-checks">Run Japanese checks</button>
+
+	<section id="results" aria-live="polite">
+		<p>Run a check to see results.</p>
+	</section>
+
+	<script>
+		localStorage.setItem( 'wpgpt-gd-unified', 'playground' );
+		window.wpgpt_us_assets = { wpgpt_warning_icon: '', wpgpt_notice_icon: '' };
+		window.$wpgpt_createElement = function( tag, attributes = {}, text = '' ) {
+			const element = document.createElement( tag );
+			Object.entries( attributes ).forEach( ( entry ) => {
+				const [ key, value ] = entry;
+				if ( 'checked' === key ) {
+					element.checked = true;
+				} else {
+					element.setAttribute( key, value );
+				}
+			} );
+			if ( text !== '' ) element.textContent = text;
+			return element;
+		};
+		window.$wpgpt_addElement = function() {};
+	</script>
+	<script src="../../../src/js/wpgpt-settings.js"></script>
+	<script src="../../../src/js/wpgpt-checks.js"></script>
+	<script src="./playground.js"></script>
+</body>
+</html>
