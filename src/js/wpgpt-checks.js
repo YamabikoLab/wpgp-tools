@@ -388,7 +388,7 @@ function wpgpt_ja_protect_technical_text( text ) {
 		{ pattern: /%\([A-Za-z0-9_.-]+\)s/gu, hidden_markup: false },
 		{ pattern: /(?:[A-Za-z_][A-Za-z0-9_]*|%(?:\d+\$)?s)\(\)/gu, hidden_markup: false },
 		{ pattern: /`[^`]+`/gu, hidden_markup: false },
-		{ pattern: /(?:[A-Z]:\\\\|\/(?![A-Za-z][A-Za-z0-9_-]*>))\S+/giu, hidden_markup: false },
+		{ pattern: /(?:[A-Z]:\\|\/(?![A-Za-z][A-Za-z0-9_-]*>))\S+/giu, hidden_markup: false },
 	];
 
 	patterns.forEach( ( item ) => {
