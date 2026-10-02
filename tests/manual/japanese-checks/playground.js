@@ -12,7 +12,7 @@ const presets = [
 	{ label: '3-4 Sorry prefix', original: 'Sorry, you cannot continue.', translated: '申し訳ありません。続行できません。' },
 	{ label: '3-6 Recommended expressions', original: 'Save all', translated: '全て既に確認して下さい' },
 	{ label: '5 Middle dot', original: 'Reorder rows and columns', translated: '行・列を並び替える' },
-	{ label: 'Protected URL / email / code / path', original: 'Technical text', translated: 'https://example.com user@example.com `全て` /tmp/foo を確認' },
+	{ label: 'Protected URL / email / code / path', original: 'Technical text', translated: 'https://example.com user@example.com `全て` /tmp/foo C:\\tmp\\全て を確認' },
 	{ label: 'Duplicate text: warning without unsafe highlight', original: 'Save all', translated: '全て保存し、全て確認' },
 ];
 
