@@ -1242,7 +1242,8 @@ function wpgpt_ja_check_recommended_expressions( translated ) {
  * @param {string} translated 判定対象の翻訳文。
  * @returns {Array<Object>} ルール 5 に該当する確認指摘。
  */
-function wpgpt_ja_check_middle_dot( translated ) {	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+function wpgpt_ja_check_middle_dot( translated ) {
+	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const matches = [];
 
 	/*
