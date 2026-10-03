@@ -1,4 +1,4 @@
-const WPGPT_VERSION = '2.1.1';
+const WPGPT_VERSION = '2.1.2';
 const wpgpt_settings = {
 	'checks': {
 		'desc':           'General Checks',
@@ -297,9 +297,10 @@ function wpgpt_settings_page() {
 	wpgpt_info.className = 'wpgpt-info';
 	wpgpt_info.append(
 		$wpgpt_createElement( 'strong', {}, `WPGPT version ${WPGPT_VERSION}` ), ' | ',
-		$wpgpt_createElement( 'a', { 'href': 'https://github.com/vlad-timotei/wpgp-tools/blob/main/README.md' }, 'Documentation' ), ' | ',
-		$wpgpt_createElement( 'a', { 'href': 'https://github.com/vlad-timotei/wpgp-tools/issues/new?assignees=&amp;labels=&amp;template=bug_report.md' }, 'Report a bug' ),	' or ',
-		$wpgpt_createElement( 'a', { 'href': 'https://github.com/vlad-timotei/wpgp-tools/issues/new?assignees=&amp;labels=&amp;template=feature_request.md' }, 'request a feature' ), ' | ',
+		$wpgpt_createElement( 'a', { 'href': 'https://github.com/YamabikoLab/wpgp-tools/blob/main/README.md' }, 'Documentation' ), ' | ',
+		$wpgpt_createElement( 'a', { 'href': 'https://github.com/YamabikoLab/wpgp-tools/issues/new' }, 'Report a bug' ),	' or ',
+		$wpgpt_createElement( 'a', { 'href': 'https://github.com/YamabikoLab/wpgp-tools/issues/new' }, 'request a feature' ), ' | ',
+		$wpgpt_createElement( 'a', { 'href': 'https://github.com/vlad-timotei/wpgp-tools' }, 'Upstream' ), ' | ',
 		$wpgpt_createElement( 'a', { 'href': '#', 'title': 'Drag and drop to Bookmarks bar to backup your settings.', 'id': 'wpgpt-backup' }, 'Backup WPGPT settings' ), ' | Happy translating!',
 	);
 	settingsFragment.appendChild( wpgpt_info.cloneNode( true ) );

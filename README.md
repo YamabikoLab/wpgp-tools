@@ -1,6 +1,11 @@
 
-# WPGPTools - Translate faster and better
-[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://github.com/vlad-timotei/wpgp-tools/blob/main/LICENSE) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/181eea3a14fe4b9cae1c6ad2ff8c802a)](https://www.codacy.com/gh/vlad-timotei/wpgp-tools/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=vlad-timotei/wpgp-tools&amp;utm_campaign=Badge_Grade)
+# WPGP Tools for Japanese - YamabikoLab
+
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+
+This repository is a **YamabikoLab-maintained fork of [WPGP Tools](https://github.com/vlad-timotei/wpgp-tools)**, extended for Japanese WordPress translation work on translate.wordpress.org.
+
+It is not the official upstream distribution. Japanese-specific checks and YamabikoLab changes should be reported to this repository.
 
 <img align="right" src="https://user-images.githubusercontent.com/65488419/124776835-6defbf00-df48-11eb-9594-c538fe220dbd.png">
 
@@ -184,12 +189,37 @@ Note: Disable custom keyboard shortcuts if you use keyboard `Alt + numbers` to i
 
 ## Installation
 
-#### Chrome, Edge, Opera & Brave - [Download from Chrome Web Store](https://chrome.google.com/webstore/detail/wpgp-tools/bioidgadpdnajjaddfmoaohflfbmmhcn)
-#### Firefox - [Download from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/wpgpt/)
+### Chrome
 
+The YamabikoLab edition is intended to be distributed through an **Unlisted Chrome Web Store listing** so translators can install and update it without Developer Mode.
 
-(The Tampermonkey user script version no longer get updates notifications and will not be maintained, so please use the official extension.)
- 
+The Chrome Web Store distribution URL will be added here after the listing has completed review and is ready for distribution.
+
+> [!IMPORTANT]
+> If you already use the upstream WPGP Tools extension, disable it before enabling the YamabikoLab edition. Running both extensions at the same time is not supported because they operate on the same translate.wordpress.org pages and share page elements and LocalStorage keys.
+
+### Development / testing
+
+For development and review, use a GitHub Release ZIP or load the `src/` directory as an unpacked extension in Chrome.
+
+To build the distributable ZIP locally:
+
+```sh
+./scripts/build-extension-zip.sh
+```
+
+The script reads the version from `src/manifest.json` and creates `dist/wpgp-tools-<version>.zip`. The ZIP contains the **contents of `src/`**, so `manifest.json` is at the archive root.
+
+For releases, keep these versions identical:
+
+- `src/manifest.json` `version`
+- `src/js/wpgpt-settings.js` `WPGPT_VERSION`
+- Git tag
+- GitHub Release
+- Distribution ZIP filename
+
+Firefox Add-ons remains an upstream distribution channel and is not provided for this YamabikoLab edition.
+
 ## GlotDict compatibility
  WPGPT asumes by default that you use GlotDict as well and so it disables features that have been imported in GlotDict. If you don't use GlotDict, change this behaviour in Tools Settings. But take a look first at what GlotDict has for you! :) 
 
@@ -217,7 +247,14 @@ To backup and restore WPGPT settings:
 
 ### [Changelog](/CHANGELOG.md)
 
-### [Documentation](https://github.com/vlad-timotei/wpgp-tools/wiki)
+### Documentation
+
+See this README for the YamabikoLab edition.
+
+### Upstream
+
+- [Original WPGP Tools repository](https://github.com/vlad-timotei/wpgp-tools)
+- [Original WPGP Tools documentation](https://github.com/vlad-timotei/wpgp-tools/wiki)
 
 ### Contributions
 Contributions are welcome, bugreports, suggestions and even pull requests! No limitations, shoot for the stars!

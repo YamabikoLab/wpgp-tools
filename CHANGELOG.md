@@ -1,5 +1,8 @@
 # 2.1.2
 - Deprecate Non Translatable feature
+- Prepare YamabikoLab distribution through an Unlisted Chrome Web Store listing
+- Add a versioned Chrome extension ZIP build script for GitHub Releases
+- Distinguish the YamabikoLab edition in extension metadata, documentation, support links, and icons
 
 # 2.1.1
 20.02.2023
