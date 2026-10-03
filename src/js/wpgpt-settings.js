@@ -296,7 +296,7 @@ function wpgpt_settings_page() {
 	const wpgpt_info = document.createElement( 'div' );
 	wpgpt_info.className = 'wpgpt-info';
 	wpgpt_info.append(
-		$wpgpt_createElement( 'strong', {}, `WPGPT version ${WPGPT_VERSION}` ), ' | ',
+		$wpgpt_createElement( 'strong', {}, `WPGP Tools for Japanese (YamabikoLab) version ${WPGPT_VERSION}` ), ' | ',
 		$wpgpt_createElement( 'a', { 'href': 'https://github.com/YamabikoLab/wpgp-tools/blob/main/README.md' }, 'Documentation' ), ' | ',
 		$wpgpt_createElement( 'a', { 'href': 'https://github.com/YamabikoLab/wpgp-tools/issues/new' }, 'Report a bug' ),	' or ',
 		$wpgpt_createElement( 'a', { 'href': 'https://github.com/YamabikoLab/wpgp-tools/issues/new' }, 'request a feature' ), ' | ',
