@@ -164,23 +164,37 @@ function loadWpgptChecks() {
 		api[ name ] = ( ...args ) => normalize( context[ name ]( ...args ) );
 	} );
 
-	api.runJapaneseChecks = ( singularOriginal, translated ) => {
-		const results = {
-			warning: [],
-			notice: [],
-			highlight_me: [],
-		};
-		context.wpgpt_run_japanese_checks(
-			results,
-			singularOriginal,
-			translated,
-			false
-		);
-		return {
-			warning: results.warning.map( ( item ) => item.textContent ),
-			notice: results.notice.map( ( item ) => item.textContent ),
-			highlight_me: normalize( results.highlight_me ),
-		};
+	api.runJapaneseChecks = ( singularOriginal, translated, settingOverrides = {} ) => {
+		const previousStates = {};
+		Object.entries( settingOverrides ).forEach( ( [ key, state ] ) => {
+			if ( ! context.wpgpt_settings[ key ] ) {
+				throw new Error( `Unknown WPGP setting: ${key}` );
+			}
+			previousStates[ key ] = context.wpgpt_settings[ key ].state;
+			context.wpgpt_settings[ key ].state = state;
+		} );
+
+		try {
+			const results = {
+				warning: [],
+				notice: [],
+				highlight_me: [],
+			};
+			context.wpgpt_run_japanese_checks(
+				results,
+				singularOriginal,
+				translated
+			);
+			return {
+				warning: results.warning.map( ( item ) => item.textContent ),
+				notice: results.notice.map( ( item ) => item.textContent ),
+				highlight_me: normalize( results.highlight_me ),
+			};
+		} finally {
+			Object.entries( previousStates ).forEach( ( [ key, state ] ) => {
+				context.wpgpt_settings[ key ].state = state;
+			} );
+		}
 	};
 
 	return api;
