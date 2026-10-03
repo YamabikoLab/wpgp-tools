@@ -1121,13 +1121,14 @@ describe( 'Japanese v1 rule 5', () => {
 	} );
 
 	/**
-	 * 保護文字列と通常本文の両方に中点がある場合、通常本文だけを指摘することを確認する。
+	 * 保護文字列と通常本文の両方に中点がある場合、通常本文だけを根拠として指摘することを確認する。
 	 *
 	 * 操作:
-	 * - コード内部と通常本文の双方に中点を含む翻訳を確認する。
+	 * - コード内部と通常本文の双方に同じ中点を含む翻訳を確認する。
 	 *
 	 * 期待結果:
 	 * - ルール 5 の警告は1件だけ返る。
+	 * - 同じ文字列が複数箇所に存在して強調位置を一意に特定できないため、強調候補は返らない。
 	 */
 	test( 'when protected and normal-text middle dots coexist, should report only the normal-text occurrence', () => {
 		const results = runRule(
@@ -1137,7 +1138,7 @@ describe( 'Japanese v1 rule 5', () => {
 		);
 
 		assert.equal( results.warning.length, 1 );
-		assert.deepEqual( results.highlight_me, [ '・' ] );
+		assert.deepEqual( results.highlight_me, [] );
 	} );
 } );
 
