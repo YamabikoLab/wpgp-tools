@@ -113,6 +113,7 @@ function loadWpgptChecks() {
 			location: {
 				pathname: '/projects/test/ja/default/',
 			},
+			addEventListener: () => {},
 		},
 		document: createDocument(),
 		wpgpt_settings: createSettings(),
