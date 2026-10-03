@@ -752,9 +752,13 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 			WPGPT_JA_NO_SPACE_PUNCTUATION.has( left ) || WPGPT_JA_NO_SPACE_PUNCTUATION.has( right ) ||
 			[ ',', '.', '，', '．', '､', '｡' ].includes( left ) || [ ',', '.', '，', '．', '､', '｡' ].includes( right )
 		) continue;
+		// 左側が数字以外の半角 ASCII 文字かを確認し、日本語との境界判定に使う。
 		const left_half = WPGPT_JA_ASCII_NON_DIGIT.test( left ) && ! /\d/.test( left );
+		// 右側が数字以外の半角 ASCII 文字かを確認し、日本語との境界判定に使う。
 		const right_half = WPGPT_JA_ASCII_NON_DIGIT.test( right ) && ! /\d/.test( right );
+		// 左側が日本語文字かを確認し、半角文字との組み合わせを判定する。
 		const left_japanese = WPGPT_JA_JAPANESE_CHARACTER.test( left );
+		// 右側が日本語文字かを確認し、半角文字との組み合わせを判定する。
 		const right_japanese = WPGPT_JA_JAPANESE_CHARACTER.test( right );
 	
 		/*
@@ -802,7 +806,9 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 			 * 同じ記号に対する指摘を1件にまとめ、
 			 * 該当するすべての位置を保持する。
 			 */
+			// 最初に見つかった記号種を、この指摘グループの代表として保持する。
 			if ( unnecessary_symbol === undefined ) unnecessary_symbol = character;
+			// 代表と同じ記号種だけを同一メッセージへまとめ、異なる記号種は混在させない。
 			if ( unnecessary_symbol === character ) {
 				// 前側に空白がある場合は、強調範囲へその不要な空白も含める。
 				const start = spacing_characters.has( translated[ index - 1 ] || '' ) ? index - 1 : index;
@@ -850,7 +856,9 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 			 * コロンの直後は、許可された空白文字が1つだけ存在する状態を正しいものとする。
 			 * 空白がない、複数ある、または許可されていない空白文字を含む場合は指摘する。
 			 */
+			// コロン後の空白列に、許可していない空白文字が1つでも含まれるかを確認する。
 			const invalid = after.spacing_indexes.some( ( spacing_index ) => ! valid_colon_spacing_characters.has( translated[ spacing_index ] || '' ) );
+			// 空白なし・複数空白・不正な空白文字のいずれかなら、正しいコロン後スペースではない。
 			if ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) {
 				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
 			}
@@ -1193,6 +1201,7 @@ function wpgpt_ja_check_sorry_prefix( singular_original, translated ) {
 	 * 対応する謝罪表現が見つかった場合だけ、
 	 * その先頭部分を削除対象として指摘する。
 	 */
+	// 謝罪表現が見つかった場合だけ指摘を返し、見つからなければこのルールでは指摘しない。
 	return prefix
 		? [ wpgpt_ja_finding(
 			'ja_sorry_prefix',
@@ -1293,6 +1302,7 @@ function wpgpt_ja_check_middle_dot( translated ) {
 	}
 
 	// 中点が1件以上見つかった場合だけルール 5 の確認指摘を返す。
+	// 検出件数の有無で、指摘を返すか空配列を返すかを分ける。
 	return matches.length
 		? [ wpgpt_ja_finding(
 			'ja_middle_dot',
