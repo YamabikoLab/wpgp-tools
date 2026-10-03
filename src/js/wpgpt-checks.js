@@ -425,24 +425,62 @@ function wpgpt_is_japanese_locale() {
 function wpgpt_ja_protect_technical_text( text ) {
 	const protected_indexes = new Set();
 	const hidden_markup_indexes = new Set();
+
+	/*
+	 * 日本語本文として判定しない技術文字列を定義する。
+	 *
+	 * hidden_markup が true のものは、チェック対象から除外するだけでなく、
+	 * 画面上には表示されない文字列として隣接文字の判定でも読み飛ばす。
+	 */
 	const patterns = [
+		// URL は内容自体に記号や半角文字を含むため、日本語の表記ルールを適用しない。
 		{ pattern: /https?:\/\/[^\s]+/giu, hidden_markup: false },
+
+		// メールアドレスは英数字や記号の組み合わせをそのまま保持する。
 		{ pattern: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, hidden_markup: false },
+
+		// HTML タグは画面に表示されないため、保護するとともに表示上の隣接判定でも読み飛ばす。
 		{ pattern: /<[^>]+>/gu, hidden_markup: true },
+
+		// テンプレート用のマークアップは画面に表示されないため、表示上の隣接判定でも読み飛ばす。
 		{ pattern: /\{\{\/?[A-Za-z][A-Za-z0-9_-]*\}\}/gu, hidden_markup: true },
+
+		// 「%s」「%1$s」などの文字列プレースホルダーは、その書式を変更しない。
 		{ pattern: /%(?:\d+\$)?s/gu, hidden_markup: false },
+
+		// 「%(name)s」形式の名前付きプレースホルダーは、その書式を変更しない。
 		{ pattern: /%\([A-Za-z0-9_.-]+\)s/gu, hidden_markup: false },
+
+		// 関数名やプレースホルダーに続く「()」は、技術的な表記としてそのまま保持する。
 		{ pattern: /(?:[A-Za-z_][A-Za-z0-9_]*|%(?:\d+\$)?s)\(\)/gu, hidden_markup: false },
+
+		// バッククォートで囲まれたコード表記は、日本語本文の表記ルールを適用しない。
 		{ pattern: /`[^`]+`/gu, hidden_markup: false },
+
+		// Windows または Unix 系のファイルパスは、記号や半角文字を含めてそのまま保持する。
 		{ pattern: /(?:[A-Z]:\\|\/(?![A-Za-z][A-Za-z0-9_-]*>))\S+/giu, hidden_markup: false },
 	];
 
-	// 日本語本文として判定してはいけない技術文字列を種類ごとに確認し、対象範囲を保護する。
+	/*
+	 * 技術文字列ごとに翻訳文内の該当範囲を特定し、
+	 * 日本語の表記ルールを適用しない位置として記録する。
+	 */
 	patterns.forEach( ( item ) => {
 		for ( const match of text.matchAll( item.pattern ) ) {
+			/*
+			 * 一致した文字列全体を保護することで、
+			 * その内部の個々の文字が別の日本語ルールで誤って指摘されることを防ぐ。
+			 */
 			for ( let index = match.index; index < match.index + match[ 0 ].length; index++ ) {
 				protected_indexes.add( index );
-				item.hidden_markup && hidden_markup_indexes.add( index );
+
+				/*
+				 * 画面に表示されないマークアップの場合は、
+				 * 表示上の前後関係を判定するときにも読み飛ばせるよう別途記録する。
+				 */
+				if ( item.hidden_markup ) {
+					hidden_markup_indexes.add( index );
+				}
 			}
 		}
 	} );
@@ -468,11 +506,13 @@ function wpgpt_ja_visible_adjacent_text( text, hidden_markup_indexes, start_inde
 	const spacing_indexes = [];
 	// 表示されないマークアップと空白を読み飛ばし、画面上で実際に隣接する文字を確定する。
 	while ( index >= 0 && index < text.length ) {
+		// マークアップは画面上に表示されないため、隣接文字として扱わない。
 		if ( hidden_markup_indexes.has( index ) ) {
 			index += direction;
 			continue;
 		}
 		const character = text[ index ];
+		// 空白は隣接関係を判定するために位置を記録し、その先の表示文字まで探索する。
 		if ( spacing_characters.has( character ) ) {
 			spacing_indexes.push( index );
 			index += direction;
@@ -498,12 +538,15 @@ function wpgpt_ja_visible_adjacent_text( text, hidden_markup_indexes, start_inde
 function wpgpt_ja_outer_parentheses_spacing( text, hidden_markup_indexes, start_index, direction ) {
 	let index = start_index;
 	let space_count = 0;
+	// 翻訳文の範囲内にある間、丸括弧の外側にある表示文字を探索する。
 	while ( index >= 0 && index < text.length ) {
+		// マークアップは画面上に表示されないため、外側の文字として扱わない。
 		if ( hidden_markup_indexes.has( index ) ) {
 			index += direction;
 			continue;
 		}
 		const character = text[ index ];
+		// 表示文字との間にある半角スペースは、外側のスペース数として数える。
 		if ( ' ' === character ) {
 			space_count++;
 			index += direction;
@@ -525,6 +568,7 @@ function wpgpt_ja_outer_parentheses_spacing( text, hidden_markup_indexes, start_
  * @returns {boolean} 数値表現の一部として扱う場合は true。
  */
 function wpgpt_ja_is_numeric_full_width_punctuation( text, index ) {
+	// 数値表現として例外扱いするのは、全角カンマと全角ピリオドだけに限定する。
 	if ( ! [ '，', '．' ].includes( text[ index ] ) ) {
 		return false;
 	}
@@ -533,7 +577,10 @@ function wpgpt_ja_is_numeric_full_width_punctuation( text, index ) {
 }
 
 /**
- * 指摘箇所を UTF-16 code unit の半開区間として表す。
+ * 日本語チェックで検出した指摘箇所を、共通の位置情報として作成する。
+ *
+ * 各チェックルールで見つけた問題箇所について、翻訳文のどこを指摘対象として
+ * 扱うかを開始位置と終了位置で表し、検出結果の表示や強調に利用できる形にそろえる。
  *
  * @param {number} start 指摘箇所の開始位置。
  * @param {number} end 指摘箇所の終了位置。終了位置自体は含まない。
@@ -571,6 +618,10 @@ function wpgpt_ja_check_punctuation( translated ) {
 	// 翻訳本文に現れる代替句読点を確認し、技術文字列と数値表現を除いた箇所だけを指摘する。
 	for ( let index = 0; index < translated.length; index++ ) {
 		const character = translated[ index ];
+		/*
+		 * 技術文字列の外側にある代替句読点のうち、
+		 * 数値表現の一部ではない文字だけをルール 1-1 の対象とする。
+		 */
 		if (
 			! protected_indexes.has( index ) &&
 			[ '，', '．', '､', '｡' ].includes( character ) &&
@@ -597,16 +648,33 @@ function wpgpt_ja_check_half_width( translated ) {
 	const grouped = new Map();
 	// 全角 ASCII 相当文字を確認し、同じ文字種の違反は1件の指摘へまとめて全位置を保持する。
 	for ( let index = 0; index < translated.length; index++ ) {
+		/*
+		 * URL やメールアドレスなどの技術文字列は、
+		 * 表記を変更すると内容そのものを壊す可能性があるため判定しない。
+		 */
 		if ( protected_indexes.has( index ) ) continue;
 		const character = translated[ index ];
 		const code_point = character?.codePointAt( 0 );
+		/*
+		 * ルール 1-2 の対象は、半角 ASCII へ直接対応付けられる
+		 * 全角 ASCII 相当文字だけに限定する。
+		 */
 		if ( code_point === undefined || code_point < 0xff01 || code_point > 0xff5e ) continue;
+
+		/*
+		 * 全角丸括弧はルール 1-5、数値表現ではない「，」「．」はルール 1-1 で扱う。
+		 * 数値表現中の「，」「．」は句読点ではないため、ルール 1-2 の対象として残す。
+		 */
 		if (
 			[ '（', '）' ].includes( character ) ||
 			( [ '，', '．' ].includes( character ) && ! wpgpt_ja_is_numeric_full_width_punctuation( translated, index ) )
 		) continue;
 		const expected = String.fromCodePoint( code_point - 0xfee0 );
 		const key = `${character}:${expected}`;
+		/*
+		 * 同じ全角文字と期待する半角文字の組み合わせは、
+		 * 指摘を1件にまとめて該当箇所だけを追加する。
+		 */
 		if ( ! grouped.has( key ) ) grouped.set( key, { character, expected, matches: [] } );
 		grouped.get( key ).matches.push( wpgpt_ja_match( index, index + 1 ) );
 	}
@@ -643,18 +711,38 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 
 	// 半角文字と日本語の境界を確認し、必要な半角スペースが1つだけ存在することを保証する。
 	for ( let index = 0; index < spacing_text.length - 1; index++ ) {
+		/*
+		 * プレースホルダーなどの技術文字列の内部は、
+		 * 表記上の半角・全角境界として扱わない。
+		 */
 		if ( protected_indexes.has( index ) ) continue;
 		const left = spacing_text[ index ] || '';
 		let right_index = index + 1;
 		let space_count = 0;
 		let invalid_space = false;
+
+		/*
+		 * 左右の文字の間にある空白をまとめて確認する。
+		 * 半角スペース以外の空白が含まれている場合も、
+		 * 正しい「半角スペース1つ」の状態ではないものとして扱う。
+		 */
 		while ( spacing_characters.has( spacing_text[ right_index ] || '' ) ) {
 			space_count++;
 			invalid_space ||= ' ' !== spacing_text[ right_index ];
 			right_index++;
 		}
+
+		/*
+		 * 空白の先が技術文字列の場合は、
+		 * 通常の半角文字と日本語の境界として判定しない。
+		 */
 		if ( protected_indexes.has( right_index ) ) continue;
 		const right = spacing_text[ right_index ] || '';
+
+		/*
+		 * 丸括弧、コロン、句読点などはそれぞれ専用の空白規則を持つため、
+		 * 半角文字と日本語の一般的な境界判定から除外する。
+		 */
 		if (
 			'(' === left || ')' === right || ')' === left || '(' === right ||
 			':' === left || ':' === right ||
@@ -665,10 +753,20 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		const right_half = WPGPT_JA_ASCII_NON_DIGIT.test( right ) && ! /\d/.test( right );
 		const left_japanese = WPGPT_JA_JAPANESE_CHARACTER.test( left );
 		const right_japanese = WPGPT_JA_JAPANESE_CHARACTER.test( right );
+	
+		/*
+		 * 半角英字・記号と日本語が隣接する境界では、
+		 * 両者の間を半角スペース1つだけにする。
+		 */
 		if ( ( ( left_half && right_japanese ) || ( left_japanese && right_half ) ) && ( 1 !== space_count || invalid_space ) ) {
 			const message = 0 === space_count
 				? `「${left}」と「${right}」の間に半角スペースを入れてください`
 				: `「${left}」と「${right}」の間の半角スペースは1つにしてください`;
+
+			/*
+			 * 同じ種類の指摘だけを1件にまとめ、
+			 * 該当するすべての位置を保持する。
+			 */
 			if ( boundary_message === undefined ) boundary_message = message;
 			if ( boundary_message === message ) boundary_matches.push( wpgpt_ja_match( index, right_index + 1 ) );
 		}
@@ -676,12 +774,26 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 
 	// 日本語の句読点・括弧類は前後に空白を置かないため、隣接する不要な空白を確認する。
 	for ( let index = 0; index < translated.length; index++ ) {
+
+		/*
+		 * 技術文字列内部の記号は、日本語本文の句読点・括弧として判定しない。
+		 */
 		if ( protected_indexes.has( index ) ) continue;
 		const character = translated[ index ];
+
+		/*
+		 * 前後に空白を置かない句読点・括弧類に空白が隣接している場合は、
+		 * 不要な空白として指摘する。
+		 */
 		if (
 			WPGPT_JA_NO_SPACE_PUNCTUATION.has( character ) &&
 			( spacing_characters.has( translated[ index - 1 ] || '' ) || spacing_characters.has( translated[ index + 1 ] || '' ) )
 		) {
+
+			/*
+			 * 同じ記号に対する指摘を1件にまとめ、
+			 * 該当するすべての位置を保持する。
+			 */
 			if ( unnecessary_symbol === undefined ) unnecessary_symbol = character;
 			if ( unnecessary_symbol === character ) {
 				const start = spacing_characters.has( translated[ index - 1 ] || '' ) ? index - 1 : index;
@@ -693,18 +805,37 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 
 	// コロン固有の規則として、表示上の前後関係を基準に「前は空白なし、後は1つ」を確認する。
 	for ( let index = 0; index < translated.length; index++ ) {
+
+		/*
+		 * コロン以外の文字と、技術文字列内部のコロンは
+		 * この規則の判定対象としない。
+		 */
 		if ( ':' !== translated[ index ] || protected_indexes.has( index ) ) continue;
 		const before = wpgpt_ja_visible_adjacent_text( translated, hidden_markup_indexes, index - 1, -1, spacing_characters );
 		const after = wpgpt_ja_visible_adjacent_text( translated, hidden_markup_indexes, index + 1, 1, spacing_characters );
+
+		/*
+		 * 「12:30」のように、空白を挟まず数字同士をコロンで区切る場合は
+		 * 時刻表記として扱い、コロン後の空白を要求しない。
+		 */
 		if (
 			before && after &&
 			0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length &&
 			/\d/u.test( before.character ) && /\d/u.test( after.character )
 		) continue;
+
+		/*
+		 * コロンの直前には空白を置かないため、
+		 * 表示上の直前文字との間に空白があれば指摘する。
+		 */
 		if ( before && before.spacing_indexes.length > 0 ) {
 			colon_before_matches.push( wpgpt_ja_match( Math.min( ...before.spacing_indexes ), index + 1 ) );
 		}
 		if ( after ) {
+			/*
+			 * コロンの直後は、許可された空白文字が1つだけ存在する状態を正しいものとする。
+			 * 空白がない、複数ある、または許可されていない空白文字を含む場合は指摘する。
+			 */
 			const invalid = after.spacing_indexes.some( ( spacing_index ) => ! valid_colon_spacing_characters.has( translated[ spacing_index ] || '' ) );
 			if ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) {
 				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
@@ -736,17 +867,48 @@ function wpgpt_ja_check_parentheses( translated ) {
 	const outer_matches = [];
 	// 丸括弧の表記と、利用者に見える外側文字とのスペース関係を翻訳文全体で確認する。
 	for ( let index = 0; index < translated.length; index++ ) {
+
+		/*
+		 * プレースホルダーなどの技術文字列内部にある丸括弧は、
+		 * 日本語本文の表記ルールの対象としない。
+		 */
 		if ( protected_indexes.has( index ) ) continue;
 		const character = translated[ index ];
+
+		/*
+		 * 日本語本文の丸括弧には半角を使用するため、
+		 * 全角の開き括弧・閉じ括弧を指摘する。
+		 */
 		if ( '（' === character || '）' === character ) full_width_matches.push( wpgpt_ja_match( index, index + 1 ) );
+
+		/*
+		 * 文字列の先頭以外にある開き括弧は、
+		 * 画面上で直前に見える文字との間隔を確認する。
+		 */
 		if ( '(' === character && index > 0 ) {
 			const outside = wpgpt_ja_outer_parentheses_spacing( translated, hidden_markup_indexes, index - 1, -1 );
+
+			/*
+			 * 日本語句読点など、外側にスペースを必要としない例外を除き、
+			 * 開き括弧の直前には半角スペース1つを要求する。
+			 */
 			if ( outside && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
 				outer_matches.push( wpgpt_ja_match( Math.max( 0, index - Math.max( 1, outside.space_count ) ), index + 1 ) );
 			}
 		}
+
+		/*
+		 * 文字列の末尾以外にある閉じ括弧は、
+		 * 画面上で直後に見える文字との間隔を確認する。
+		 */
 		if ( ')' === character && index < translated.length - 1 ) {
 			const outside = wpgpt_ja_outer_parentheses_spacing( translated, hidden_markup_indexes, index + 1, 1 );
+
+			/*
+			 * 閉じ括弧の直後が句点などの例外でない場合は、
+			 * 外側に半角スペース1つを要求する。
+			 * 「。」は閉じ括弧の直後に直接置けるため、明示的に対象外とする。
+			 */
 			if ( outside && '。' !== outside.character && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
 				outer_matches.push( wpgpt_ja_match( index, Math.min( translated.length, index + Math.max( 2, outside.space_count + 1 ) ) ) );
 			}
@@ -770,8 +932,23 @@ function wpgpt_ja_check_inner_parentheses_spacing( translated ) {
 	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const matches = [];
 	for ( let index = 0; index < translated.length; index++ ) {
+
+		/*
+		 * プレースホルダーなどの技術文字列内部にある丸括弧は、
+		 * 日本語本文の空白ルールの対象としない。
+		 */
 		if ( protected_indexes.has( index ) ) continue;
+
+		/*
+		 * 開き括弧の直後が技術文字列ではなく空白の場合は、
+		 * 丸括弧内側の不要な空白として指摘する。
+		 */
 		if ( '(' === translated[ index ] && ! protected_indexes.has( index + 1 ) && /\s/u.test( translated[ index + 1 ] || '' ) ) matches.push( wpgpt_ja_match( index + 1, index + 2 ) );
+
+		/*
+		 * 閉じ括弧の直前が技術文字列ではなく空白の場合は、
+		 * 丸括弧内側の不要な空白として指摘する。
+		 */
 		if ( ')' === translated[ index ] && ! protected_indexes.has( index - 1 ) && /\s/u.test( translated[ index - 1 ] || '' ) ) matches.push( wpgpt_ja_match( index - 1, index ) );
 	}
 	return matches.length ? [ wpgpt_ja_finding( 'ja_inner_parentheses_spacing', WPGPT_JA_STYLE_GUIDE.inner_parentheses_spacing, '丸括弧の内側のスペースは削除してください', matches ) ] : [];
@@ -789,7 +966,18 @@ function wpgpt_ja_check_inner_parentheses_spacing( translated ) {
 function wpgpt_ja_check_period_inside_parentheses( translated ) {
 	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const matches = [];
+
+	/*
+	 * 現在の文字とその直後の文字を組み合わせて確認するため、
+	 * 次の文字が存在する位置までを判定対象とする。
+	 */
 	for ( let index = 0; index < translated.length - 1; index++ ) {
+
+		/*
+		 * 技術文字列の外側にある「。)」のうち、
+		 * 翻訳文末ではないものだけを括弧内末尾の句点として指摘する。
+		 * 文末の「。)」はルール 1-8 で扱うため、このルールでは対象外とする。
+		 */
 		if ( '。' === translated[ index ] && ')' === translated[ index + 1 ] && ! protected_indexes.has( index ) && ! protected_indexes.has( index + 1 ) && index + 1 !== translated.length - 1 ) {
 			matches.push( wpgpt_ja_match( index, index + 1 ) );
 		}
@@ -807,10 +995,18 @@ function wpgpt_ja_check_period_inside_parentheses( translated ) {
  * @returns {Array<Object>} ルール 1-8 に該当する指摘。
  */
 function wpgpt_ja_check_sentence_ending_parentheses( translated ) {
+	/*
+	 * このルールで指摘するのは、翻訳文が明確に「。)」で終わる場合だけとする。
+	 * 閉じ丸括弧だけで終わる文については、句点が必要かどうかを推測しない。
+	 */
 	if ( ! /。\)$/u.test( translated ) ) return [];
 	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const period_index = translated.length - 2;
 	const closing_index = translated.length - 1;
+	/*
+	 * 文末の句点または閉じ丸括弧が技術文字列の一部である場合は、
+	 * 日本語本文の句点配置ルールの対象としない。
+	 */
 	if ( protected_indexes.has( period_index ) || protected_indexes.has( closing_index ) ) return [];
 	return [ wpgpt_ja_finding( 'ja_sentence_ending_parentheses', WPGPT_JA_STYLE_GUIDE.sentence_ending_parentheses, '文末の句点は丸括弧の外に置いてください', [ wpgpt_ja_match( period_index, closing_index + 1 ) ] ) ];
 }
@@ -826,6 +1022,11 @@ function wpgpt_ja_check_sentence_ending_parentheses( translated ) {
  */
 function wpgpt_ja_check_number_spacing( translated ) {
 	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+
+	/*
+	 * 半角数字の並び、または「%d」「%1$d」などの
+	 * 整数を表す数値プレースホルダーを判定対象とする。
+	 */
 	const numeric_token = '(?:\\d+|%\\d*\\$?d)';
 	const japanese = '[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}]';
 	const pattern = new RegExp( `(?:(${numeric_token}) +(${japanese})|(${japanese}) +(${numeric_token}))`, 'gu' );
@@ -835,14 +1036,34 @@ function wpgpt_ja_check_number_spacing( translated ) {
 		const value = match[ 0 ];
 		const start = match.index;
 		const numeric = match[ 1 ] || match[ 4 ];
+
+		/*
+		 * 数字または数値プレースホルダーを含む候補だけを判定対象とする。
+		 */
 		if ( ! numeric ) continue;
 		const numeric_offset = value.indexOf( numeric );
 		const numeric_start = start + numeric_offset;
 		const numeric_end = numeric_start + numeric.length;
+
+		/*
+		 * プレースホルダーなど、保護された技術文字列に含まれる数値は
+		 * 日本語本文の数字表記として扱わない。
+		 */
 		if ( protected_indexes.has( numeric_start ) ) continue;
+
+		/*
+		 * 通常の半角数字については、英数字や「_」「.」「-」と連続している場合、
+		 * 識別子、バージョン、ファイル名などの技術的なトークンの一部として扱う。
+		 * 数値プレースホルダーは別途保護対象を判定しているため、この確認を行わない。
+		 */
 		if ( ! numeric.startsWith( '%' ) ) {
 			const before = translated[ numeric_start - 1 ] || '';
 			const after = translated[ numeric_end ] || '';
+
+			/*
+			 * 数字の前後どちらかが技術的な半角文字と連続している場合は、
+			 * 数字と日本語の間の空白ルールの対象外とする。
+			 */
 			if ( /[A-Za-z0-9_.-]/u.test( before ) || /[A-Za-z0-9_.-]/u.test( after ) ) continue;
 		}
 		matches.push( wpgpt_ja_match( start, start + value.length ) );
@@ -861,8 +1082,23 @@ function wpgpt_ja_check_number_spacing( translated ) {
  * @returns {Array<Object>} ルール 3-2 に該当する確認指摘。
  */
 function wpgpt_ja_check_view_expression( singular_original, translated ) {
-	if ( ! /^View\s+\S+/u.test( singular_original ) || ( /を表示(?:する)?/u.test( translated ) && ! /の表示/u.test( translated ) ) ) return [];
-	return [ wpgpt_ja_finding( 'ja_view_expression', WPGPT_JA_STYLE_GUIDE.view_expression, '「View XX」の訳し方を確認してください' ) ];
+	/*
+	 * 原文が「View XX」で始まる操作表現でない場合は、
+	 * この翻訳ルールの対象としない。
+	 */
+	if ( ! /^View\s+\S+/u.test( singular_original ) ) return [];
+
+	/*
+	 * 「〜を表示」または「〜を表示する」と訳され、
+	 * 名詞表現の「〜の表示」になっていなければ適切な訳として扱う。
+	 */
+	if ( /を表示(?:する)?/u.test( translated ) && ! /の表示/u.test( translated ) ) return [];
+
+	return [ wpgpt_ja_finding(
+		'ja_view_expression',
+		WPGPT_JA_STYLE_GUIDE.view_expression,
+		'「View XX」の訳し方を確認してください'
+	) ];
 }
 
 /**
@@ -877,9 +1113,29 @@ function wpgpt_ja_check_view_expression( singular_original, translated ) {
  * @returns {Array<Object>} ルール 3-3 に該当する確認指摘。
  */
 function wpgpt_ja_check_not_allowed_expression( singular_original, translated ) {
+	/*
+	 * 「you」「user」「administrator」など、利用者や権限ロールを主語として
+	 * 「not allowed to」が使われている原文だけを権限不足の表現として扱う。
+	 */
 	const permission_source = /\b(?:you|users?|administrators?|editors?|authors?|contributors?|subscribers?|customers?|members?)\s+(?:is|are) not allowed to\b/iu;
-	if ( ! permission_source.test( singular_original ) || /権限がありません/u.test( translated ) ) return [];
-	return [ wpgpt_ja_finding( 'ja_not_allowed_expression', WPGPT_JA_STYLE_GUIDE.not_allowed_expression, '「not allowed to ...」の訳し方を確認してください' ) ];
+
+	/*
+	 * 権限不足を表す「not allowed to」でない場合は、
+	 * 値制約など別の意味で使われている可能性があるため判定しない。
+	 */
+	if ( ! permission_source.test( singular_original ) ) return [];
+
+	/*
+	 * 「権限がありません」と訳されていれば、
+	 * 権限不足を表す訳として適切なものと扱う。
+	 */
+	if ( /権限がありません/u.test( translated ) ) return [];
+
+	return [ wpgpt_ja_finding(
+		'ja_not_allowed_expression',
+		WPGPT_JA_STYLE_GUIDE.not_allowed_expression,
+		'「not allowed to ...」の訳し方を確認してください'
+	) ];
 }
 
 /**
@@ -893,9 +1149,32 @@ function wpgpt_ja_check_not_allowed_expression( singular_original, translated ) 
  * @returns {Array<Object>} ルール 3-4 に該当する指摘。
  */
 function wpgpt_ja_check_sorry_prefix( singular_original, translated ) {
+	/*
+	 * 原文先頭の「Sorry,」だけをこのルールの対象とし、
+	 * 文中に現れる sorry は判定しない。
+	 */
 	if ( ! /^Sorry,\s*/u.test( singular_original ) ) return [];
-	const prefix = WPGPT_JA_APOLOGY_PREFIXES.find( ( candidate ) => translated.startsWith( candidate ) );
-	return prefix ? [ wpgpt_ja_finding( 'ja_sorry_prefix', WPGPT_JA_STYLE_GUIDE.sorry_prefix, '先頭の「Sorry,」に対応する謝罪表現を削除してください', [ wpgpt_ja_match( 0, prefix.length ) ] ) ] : [];
+
+	/*
+	 * 翻訳文の先頭に「申し訳ありません」など、
+	 * 原文の「Sorry,」に対応すると判断できる謝罪表現が残っているか確認する。
+	 */
+	const prefix = WPGPT_JA_APOLOGY_PREFIXES.find(
+		( candidate ) => translated.startsWith( candidate )
+	);
+
+	/*
+	 * 対応する謝罪表現が見つかった場合だけ、
+	 * その先頭部分を削除対象として指摘する。
+	 */
+	return prefix
+		? [ wpgpt_ja_finding(
+			'ja_sorry_prefix',
+			WPGPT_JA_STYLE_GUIDE.sorry_prefix,
+			'先頭の「Sorry,」に対応する謝罪表現を削除してください',
+			[ wpgpt_ja_match( 0, prefix.length ) ]
+		) ]
+		: [];
 }
 
 /**
@@ -911,17 +1190,45 @@ function wpgpt_ja_check_recommended_expressions( translated ) {
 	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const recommendations = [ [ '下さい', 'ください' ], [ '全て', 'すべて' ], [ '既に', 'すでに' ] ];
 	const findings = [];
+
 	// 推奨表記ごとに翻訳文全体を確認し、同じ表記の複数箇所は1件の指摘へまとめる。
 	recommendations.forEach( ( recommendation ) => {
 		const [ detected, expected ] = recommendation;
 		const matches = [];
 		let index = translated.indexOf( detected );
+
+		/*
+		 * 対象となる表記が翻訳文内に複数ある場合も、
+		 * 出現箇所を順番にすべて確認する。
+		 */
 		while ( -1 !== index ) {
-			! protected_indexes.has( index ) && matches.push( wpgpt_ja_match( index, index + detected.length ) );
+			/*
+			 * コードなどの技術文字列内部にある表記は変更対象とせず、
+			 * 日本語本文に現れるものだけを指摘する。
+			 */
+			if ( ! protected_indexes.has( index ) ) {
+				matches.push( wpgpt_ja_match( index, index + detected.length ) );
+			}
+
 			index = translated.indexOf( detected, index + detected.length );
 		}
-		matches.length && findings.push( wpgpt_ja_finding( 'ja_recommended_expressions', WPGPT_JA_STYLE_GUIDE.recommended_expressions, `「${detected}」は「${expected}」と表記してください`, matches ) );
+
+		/*
+		 * 同じ推奨表記に対する指摘は1件にまとめ、
+		 * 該当するすべての位置を保持する。
+		 */
+		if ( matches.length ) {
+			findings.push(
+				wpgpt_ja_finding(
+					'ja_recommended_expressions',
+					WPGPT_JA_STYLE_GUIDE.recommended_expressions,
+					`「${detected}」は「${expected}」と表記してください`,
+					matches
+				)
+			);
+		}
 	} );
+
 	return findings;
 }
 
@@ -935,13 +1242,37 @@ function wpgpt_ja_check_recommended_expressions( translated ) {
  * @param {string} translated 判定対象の翻訳文。
  * @returns {Array<Object>} ルール 5 に該当する確認指摘。
  */
-function wpgpt_ja_check_middle_dot( translated ) {
-	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
+function wpgpt_ja_check_middle_dot( translated ) {	const { protected_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const matches = [];
+
+	/*
+	 * 翻訳文全体から中点を探し、
+	 * 日本語本文で使用されている箇所だけを確認対象とする。
+	 */
 	for ( let index = 0; index < translated.length; index++ ) {
-		if ( ! protected_indexes.has( index ) && [ '・', '･' ].includes( translated[ index ] ) ) matches.push( wpgpt_ja_match( index, index + 1 ) );
+		/*
+		 * コードなどの技術文字列内部にある文字は、
+		 * 日本語本文の表記ルールの対象としない。
+		 */
+		if ( protected_indexes.has( index ) ) continue;
+
+		/*
+		 * 全角中点「・」または半角中黒「･」が使用されている場合は、
+		 * 別の表現へ置き換えられないか確認する箇所として記録する。
+		 */
+		if ( [ '・', '･' ].includes( translated[ index ] ) ) {
+			matches.push( wpgpt_ja_match( index, index + 1 ) );
+		}
 	}
-	return matches.length ? [ wpgpt_ja_finding( 'ja_middle_dot', WPGPT_JA_STYLE_GUIDE.middle_dot, '中点「・」は原則使用しません。別の表現に置き換えられないか確認してください', matches ) ] : [];
+
+	return matches.length
+		? [ wpgpt_ja_finding(
+			'ja_middle_dot',
+			WPGPT_JA_STYLE_GUIDE.middle_dot,
+			'中点「・」は原則使用しません。別の表現に置き換えられないか確認してください',
+			matches
+		) ]
+		: [];
 }
 
 /**
@@ -958,19 +1289,42 @@ function wpgpt_ja_check_middle_dot( translated ) {
 function wpgpt_ja_safe_highlights( translated, findings ) {
 	const { hidden_markup_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const highlights = [];
-	// 各指摘の位置情報を確認し、表示構造を壊さず一意に特定できる箇所だけを強調表示候補へ加える。
-	// 各指摘を利用者設定の重要度へ振り分け、無効化されたルールは表示結果へ含めない。
+
+	/*
+	 * 各指摘の位置情報を確認し、
+	 * 表示構造を壊さず一意に特定できる箇所だけを強調表示候補へ加える。
+	 */
 	findings.forEach( ( finding ) => {
 		finding.matches.forEach( ( match ) => {
 			const value = translated.slice( match.start, match.end );
+
+			/*
+			 * 指摘範囲から表示対象となる文字列を取得できない場合は、
+			 * 強調表示の対象としない。
+			 */
 			if ( ! value ) return;
+
+			/*
+			 * 指摘範囲に HTML などの表示されないマークアップが含まれる場合は、
+			 * DOM 構造を壊す可能性があるため強調表示しない。
+			 */
 			for ( let index = match.start; index < match.end; index++ ) {
 				if ( hidden_markup_indexes.has( index ) ) return;
 			}
-			if ( translated.indexOf( value ) !== match.start || translated.lastIndexOf( value ) !== match.start ) return;
+
+			/*
+			 * 同じ文字列が翻訳文内の複数箇所に存在する場合は、
+			 * 文字列だけでは今回の指摘位置を一意に特定できないため強調表示しない。
+			 */
+			if (
+				translated.indexOf( value ) !== match.start ||
+				translated.lastIndexOf( value ) !== match.start
+			) return;
+
 			highlights.push( value );
 		} );
 	} );
+
 	return highlights;
 }
 
@@ -989,7 +1343,16 @@ function wpgpt_ja_safe_highlights( translated, findings ) {
  * @returns {void}
  */
 function wpgpt_run_japanese_checks( results, singular_original, translated, require_japanese_locale = true ) {
+	/*
+	 * 通常の翻訳チェックでは日本語ロケールだけを対象とする。
+	 * 個別確認などでロケール判定を不要とする場合は、この条件を無効化できる。
+	 */
 	if ( require_japanese_locale && ! wpgpt_is_japanese_locale() ) return;
+
+	/*
+	 * 各日本語ルールを実行し、検出された指摘を共通の形式でまとめる。
+	 * 原文の表現も確認するルールには、原文と翻訳文の両方を渡す。
+	 */
 	const findings = [
 		...wpgpt_ja_check_punctuation( translated ),
 		...wpgpt_ja_check_half_width( translated ),
@@ -1006,14 +1369,37 @@ function wpgpt_run_japanese_checks( results, singular_original, translated, requ
 		...wpgpt_ja_check_middle_dot( translated ),
 	];
 
+	/*
+	 * 各指摘を利用者設定の重要度へ振り分け、
+	 * 無効化されたルールは警告・通知へ追加しない。
+	 */
 	findings.forEach( ( finding ) => {
 		const severity = wpgpt_settings[ finding.setting ].state;
+
+		/*
+		 * 「nothing」が選択されているルールは、
+		 * 利用者が表示を無効化しているため結果へ含めない。
+		 */
 		if ( 'nothing' === severity ) return;
+
 		const msg = wpgpt_li.cloneNode( true );
 		msg.textContent = `${finding.style_guide_item}: ${finding.message}`;
 		wpgpt_push1( results[ severity ], msg );
 	} );
-	wpgpt_push( results.highlight_me, wpgpt_ja_safe_highlights( translated, findings.filter( ( finding ) => 'nothing' !== wpgpt_settings[ finding.setting ].state ) ) );
+
+	/*
+	 * 表示が有効な指摘だけを対象として、
+	 * DOM を壊さず一意に位置を特定できる箇所を強調表示へ追加する。
+	 */
+	wpgpt_push(
+		results.highlight_me,
+		wpgpt_ja_safe_highlights(
+			translated,
+			findings.filter(
+				( finding ) => 'nothing' !== wpgpt_settings[ finding.setting ].state
+			)
+		)
+	);
 }
 
 function wpgpt_run_romanian_checks( results, translated ) {
