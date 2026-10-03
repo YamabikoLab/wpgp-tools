@@ -1,11 +1,11 @@
 {
-	"manifest_version":3,
-	"name":"WPGP Tools",
-	"version":"2.1.1",
-	"description":"Enhanced Translation Tools for translate.w.org",
+	"manifest_version": 3,
+	"name": "WPGP Tools for Japanese (YamabikoLab)",
+	"version": "2.1.2",
+	"description": "YamabikoLab fork of WPGP Tools with checks for Japanese WordPress translations.",
 	"web_accessible_resources": [
 		{
-			"resources": [ 
+			"resources": [
 				"js/wpgpt-checks.js",
 				"js/wpgpt-settings.js",
 				"js/wpgpt-functions.js",
@@ -14,31 +14,33 @@
 				"img/warning.png",
 				"img/notice.png"
 			],
-			"matches": [ "https://translate.wordpress.org/*" ]
+			"matches": [
+				"https://translate.wordpress.org/*"
+			]
 		}
-		
 	],
-	"content_scripts":[
-	{
-		"matches":[
-			"https://translate.wordpress.org/*"
-		],
-		"js":[
-			"js/init.js",
-			"js/wpgpt-functions.js",
-			"js/wpgpt-consistency.js"
+	"content_scripts": [
+		{
+			"matches": [
+				"https://translate.wordpress.org/*"
 			],
-		"css":[
-			"css/wpgpt-style.css"
-		]
-	}],
-   	 "options_ui": {
-   		 "page": "wpgpt-settings.html",
-   		 "open_in_tab": false
-  	},
+			"js": [
+				"js/init.js",
+				"js/wpgpt-functions.js",
+				"js/wpgpt-consistency.js"
+			],
+			"css": [
+				"css/wpgpt-style.css"
+			]
+		}
+	],
+	"options_ui": {
+		"page": "wpgpt-settings.html",
+		"open_in_tab": false
+	},
 	"icons": {
-  		"16": "img/icon-16.png",
+		"16": "img/icon-16.png",
 		"48": "img/icon-48.png",
 		"128": "img/icon-128.png"
-	  }
+	}
 }
