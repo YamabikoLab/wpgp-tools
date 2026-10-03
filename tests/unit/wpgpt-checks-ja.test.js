@@ -431,7 +431,7 @@ describe( 'Japanese v1 rule 3-4', () => {
 		);
 
 		assert.equal( findings.length, 1 );
-		assert.deepEqual( findings[ 0 ].matches, [ { start: 0, end: 9 } ] );
+		assert.deepEqual( findings[ 0 ].matches, [ { start: 0, end: 8 } ] );
 	} );
 
 	/**
