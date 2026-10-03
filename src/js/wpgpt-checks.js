@@ -1066,6 +1066,7 @@ function wpgpt_ja_check_number_spacing( translated ) {
 	for ( const match of translated.matchAll( pattern ) ) {
 		const value = match[ 0 ];
 		const start = match.index;
+		// 数字が日本語の左側にある場合は第1キャプチャ、右側にある場合は第4キャプチャから数値トークンを取得する。
 		const numeric = match[ 1 ] || match[ 4 ];
 
 		/*
