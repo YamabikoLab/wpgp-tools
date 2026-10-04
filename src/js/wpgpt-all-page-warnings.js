@@ -77,6 +77,7 @@ function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
 					form: finding.form,
 					setting: finding.setting,
 					styleGuideItem: finding.style_guide_item,
+					matches: finding.matches,
 				} ) ),
 			} );
 		}
@@ -134,6 +135,7 @@ function wpgpt_all_page_warnings_collect_japanese_findings( singularOriginal, tr
 			setting: finding.setting,
 			style_guide_item: finding.style_guide_item,
 			message: finding.message,
+			matches: Array.isArray( finding.matches ) ? finding.matches : [],
 			form,
 		} ) );
 }
@@ -274,6 +276,50 @@ function wpgpt_all_page_warnings_create_element( tagName, className, text ) {
 		element.textContent = text;
 	}
 	return element;
+}
+
+function wpgpt_all_page_warnings_highlight_ranges( result, form, selectedRules, textLength ) {
+	const ranges = result.japaneseFindings
+		.filter( ( finding ) => finding.form === form )
+		.filter( ( finding ) => ! selectedRules?.size || selectedRules.has( finding.setting ) )
+		.flatMap( ( finding ) => Array.isArray( finding.matches ) ? finding.matches : [] )
+		.map( ( match ) => ( {
+			start: Math.max( 0, Math.min( textLength, match.start ) ),
+			end: Math.max( 0, Math.min( textLength, match.end ) ),
+		} ) )
+		.filter( ( match ) => Number.isInteger( match.start ) && Number.isInteger( match.end ) && match.start < match.end )
+		.sort( ( a, b ) => a.start - b.start || a.end - b.end );
+
+	return ranges.reduce( ( merged, range ) => {
+		const previous = merged[ merged.length - 1 ];
+		if ( previous && range.start <= previous.end ) {
+			previous.end = Math.max( previous.end, range.end );
+		} else {
+			merged.push( { ...range } );
+		}
+		return merged;
+	}, [] );
+}
+
+function wpgpt_all_page_warnings_append_highlighted_text( container, text, ranges ) {
+	let cursor = 0;
+
+	ranges.forEach( ( range ) => {
+		if ( cursor < range.start ) {
+			container.appendChild( document.createTextNode( text.slice( cursor, range.start ) ) );
+		}
+		const mark = wpgpt_all_page_warnings_create_element(
+			'mark',
+			'wpgpt-all-page-warnings__highlight',
+			text.slice( range.start, range.end )
+		);
+		container.appendChild( mark );
+		cursor = range.end;
+	} );
+
+	if ( cursor < text.length ) {
+		container.appendChild( document.createTextNode( text.slice( cursor ) ) );
+	}
 }
 
 const wpgptAllPageWarningsState = {
@@ -531,9 +577,22 @@ function wpgpt_all_page_warnings_result_card( result ) {
 		wpgpt_all_page_warnings_create_element( 'div', '', result.original )
 	);
 	const translated = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__field' );
+	const translatedText = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__translation' );
+	result.translations.forEach( ( translation, index ) => {
+		if ( 0 < index ) {
+			translatedText.appendChild( document.createTextNode( '\n' ) );
+		}
+		const ranges = wpgpt_all_page_warnings_highlight_ranges(
+			result,
+			index + 1,
+			wpgptAllPageWarningsState.selectedRules,
+			translation.length
+		);
+		wpgpt_all_page_warnings_append_highlighted_text( translatedText, translation, ranges );
+	} );
 	translated.append(
 		wpgpt_all_page_warnings_create_element( 'strong', '', '訳文' ),
-		wpgpt_all_page_warnings_create_element( 'div', '', result.translations.join( '\n' ) )
+		translatedText
 	);
 	const warnings = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__warnings' );
 	warnings.appendChild( wpgpt_all_page_warnings_create_element( 'strong', '', 'Warnings' ) );
@@ -874,6 +933,7 @@ globalThis.wpgpt_all_page_warnings_test_api = {
 	paginate: wpgpt_all_page_warnings_paginate,
 	ruleOptions: wpgpt_all_page_warnings_rule_options,
 	collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
+	highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
 };
 
 if ( 'undefined' !== typeof document && 'undefined' !== typeof window ) {
