@@ -76,6 +76,10 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 	return context.wpgpt_all_page_warnings_test_api;
 }
 
+function normalize( value ) {
+	return JSON.parse( JSON.stringify( value ) );
+}
+
 function sampleResults() {
 	return [
 		{
@@ -136,7 +140,7 @@ describe( 'all-page Warning result filtering', () => {
 		);
 		const summary = api.summarize( filtered );
 
-		assert.deepEqual( filtered.map( ( result ) => result.id ), [ '101', '102' ] );
+		assert.deepEqual( normalize( filtered.map( ( result ) => result.id ) ), [ '101', '102' ] );
 		assert.equal( summary.warnings, 2 );
 		assert.equal( summary.strings, 2 );
 		assert.ok( filtered[ 0 ].displayWarnings[ 0 ].text.startsWith( '1-4 ' ) );
@@ -165,7 +169,7 @@ describe( 'Japanese finding collection', () => {
 		const findings = api.collectJapaneseFindings( 'Original', '翻訳', 2 );
 
 		assert.deepEqual(
-			findings.map( ( finding ) => finding.setting ),
+			normalize( findings.map( ( finding ) => finding.setting ) ),
 			[ 'ja_punctuation', 'ja_half_full_spacing' ]
 		);
 		assert.ok( findings.every( ( finding ) => 2 === finding.form ) );
@@ -174,13 +178,13 @@ describe( 'Japanese finding collection', () => {
 	test( 'does not collect Japanese findings when Japanese checks are disabled', () => {
 		const api = loadAllPageWarnings( { jaEnabled: false } );
 
-		assert.deepEqual( api.collectJapaneseFindings( 'Original', '翻訳', 1 ), [] );
+		assert.deepEqual( normalize( api.collectJapaneseFindings( 'Original', '翻訳', 1 ) ), [] );
 	} );
 
 	test( 'does not collect Japanese findings outside a Japanese locale', () => {
 		const api = loadAllPageWarnings( { japaneseLocale: false } );
 
-		assert.deepEqual( api.collectJapaneseFindings( 'Original', 'Translation', 1 ), [] );
+		assert.deepEqual( normalize( api.collectJapaneseFindings( 'Original', 'Translation', 1 ) ), [] );
 	} );
 } );
 
@@ -213,7 +217,7 @@ describe( 'unsaved translation tracking', () => {
 		assert.equal( tracker.isDirty( 'editor-1::0' ), false );
 		assert.equal( tracker.isDirty( 'editor-2::0' ), true );
 		assert.equal( tracker.hasDirty(), true );
-		assert.deepEqual( tracker.dirtyKeys(), [ 'editor-2::0' ] );
+		assert.deepEqual( normalize( tracker.dirtyKeys() ), [ 'editor-2::0' ] );
 	} );
 
 	test( 'a failed save leaves the previous baseline and dirty state intact', () => {
