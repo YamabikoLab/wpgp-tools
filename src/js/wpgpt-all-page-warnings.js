@@ -140,12 +140,6 @@ function wpgpt_all_page_warnings_collect_japanese_findings( singularOriginal, tr
 		} ) );
 }
 
-function wpgpt_all_page_warnings_normalize_url( href, base = window.location.href ) {
-	const url = new URL( href, base );
-	url.hash = '';
-	return url.href;
-}
-
 function wpgpt_all_page_warnings_build_export_url( pageDocument = document, baseUrl = window.location.href ) {
 	const exportLink = pageDocument.querySelector( 'a#export' );
 	if ( ! exportLink ) {
@@ -326,7 +320,7 @@ function wpgpt_all_page_warnings_parse_po( po ) {
 	return entries;
 }
 
-function wpgpt_all_page_warnings_analyze_entry( entry, index, exportUrl ) {
+function wpgpt_all_page_warnings_analyze_entry( entry, exportUrl ) {
 	if ( ! entry.translations.length || ! entry.translations.some( ( translated ) => '' !== translated ) ) {
 		return null;
 	}
@@ -371,15 +365,12 @@ function wpgpt_all_page_warnings_analyze_entry( entry, index, exportUrl ) {
 
 	if ( ! warnings.length ) {
 		return {
-			checked: true,
 			result: null,
 		};
 	}
 
 	return {
-		checked: true,
 		result: {
-			id: 'po-' + ( index + 1 ),
 			context: entry.context,
 			sourceUrl: wpgpt_all_page_warnings_build_source_url( exportUrl, singularOriginal ),
 			original: originalForms.join( '\n' ),
@@ -394,8 +385,8 @@ function wpgpt_all_page_warnings_analyze_entries( entries, exportUrl ) {
 	const results = [];
 	let checkedStrings = 0;
 
-	entries.forEach( ( entry, index ) => {
-		const analyzed = wpgpt_all_page_warnings_analyze_entry( entry, index, exportUrl );
+	entries.forEach( ( entry ) => {
+		const analyzed = wpgpt_all_page_warnings_analyze_entry( entry, exportUrl );
 		if ( ! analyzed ) {
 			return;
 		}
@@ -473,7 +464,6 @@ const wpgptAllPageWarningsState = {
 	pageSize: 25,
 	scanning: false,
 	checkedStrings: 0,
-	warningCount: 0,
 	dirtyTracker: wpgpt_create_dirty_tracker(),
 	pendingSaves: new Map(),
 	ui: {},
@@ -835,7 +825,6 @@ function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.selectedRules.clear();
 	wpgptAllPageWarningsState.page = 1;
 	wpgptAllPageWarningsState.checkedStrings = 0;
-	wpgptAllPageWarningsState.warningCount = 0;
 	wpgptAllPageWarningsState.ui.content.hidden = true;
 	wpgptAllPageWarningsState.ui.results.replaceChildren();
 	wpgptAllPageWarningsState.ui.paginationTop.replaceChildren();
@@ -869,10 +858,6 @@ async function wpgpt_all_page_warnings_scan() {
 		const analyzed = wpgpt_all_page_warnings_analyze_entries( entries, exportUrl );
 		wpgptAllPageWarningsState.results = analyzed.results;
 		wpgptAllPageWarningsState.checkedStrings = analyzed.checkedStrings;
-		wpgptAllPageWarningsState.warningCount = analyzed.results.reduce(
-			( total, result ) => total + result.warnings.length,
-			0
-		);
 
 		wpgpt_all_page_warnings_set_status(
 			'✓ ' + wpgptAllPageWarningsState.checkedStrings + '件の翻訳文字列を確認しました。',
