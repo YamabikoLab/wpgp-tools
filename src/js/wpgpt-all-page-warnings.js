@@ -416,12 +416,25 @@ function wpgpt_all_page_warnings_rule_counts( results ) {
 	return counts;
 }
 
+function wpgpt_all_page_warnings_rule_options( results ) {
+	const counts = wpgpt_all_page_warnings_rule_counts( results );
+	return WPGPT_ALL_PAGE_WARNING_RULES
+		.map( ( rule ) => {
+			const count = counts.get( rule.setting ) || 0;
+			return {
+				...rule,
+				count,
+				countLabel: count + '件',
+			};
+		} )
+		.filter( ( rule ) => 0 < rule.count );
+}
+
 function wpgpt_all_page_warnings_render_rule_options() {
 	const container = wpgptAllPageWarningsState.ui.ruleOptions;
-	const counts = wpgpt_all_page_warnings_rule_counts( wpgptAllPageWarningsState.results );
 	container.replaceChildren();
 
-	WPGPT_ALL_PAGE_WARNING_RULES.forEach( ( rule ) => {
+	wpgpt_all_page_warnings_rule_options( wpgptAllPageWarningsState.results ).forEach( ( rule ) => {
 		const label = wpgpt_all_page_warnings_create_element( 'label', 'wpgpt-all-page-warnings__rule' );
 		const checkbox = document.createElement( 'input' );
 		checkbox.type = 'checkbox';
@@ -439,7 +452,7 @@ function wpgpt_all_page_warnings_render_rule_options() {
 		label.append(
 			checkbox,
 			wpgpt_all_page_warnings_create_element( 'span', '', rule.label ),
-			wpgpt_all_page_warnings_create_element( 'small', '', String( counts.get( rule.setting ) || 0 ) )
+			wpgpt_all_page_warnings_create_element( 'small', '', rule.countLabel )
 		);
 		container.appendChild( label );
 	} );
@@ -524,8 +537,7 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	return card;
 }
 
-function wpgpt_all_page_warnings_render_pagination( pageInfo ) {
-	const pagination = wpgptAllPageWarningsState.ui.pagination;
+function wpgpt_all_page_warnings_render_pagination( pageInfo, pagination ) {
 	pagination.replaceChildren();
 	if ( pageInfo.totalPages <= 1 ) {
 		return;
@@ -602,7 +614,8 @@ function wpgpt_all_page_warnings_render() {
 		'結果ページ ' + pageInfo.page + ' / ' + pageInfo.totalPages;
 	wpgptAllPageWarningsState.ui.content.hidden = false;
 	wpgpt_all_page_warnings_render_chips();
-	wpgpt_all_page_warnings_render_pagination( pageInfo );
+	wpgpt_all_page_warnings_render_pagination( pageInfo, wpgptAllPageWarningsState.ui.paginationTop );
+	wpgpt_all_page_warnings_render_pagination( pageInfo, wpgptAllPageWarningsState.ui.paginationBottom );
 }
 
 function wpgpt_all_page_warnings_reset_results() {
@@ -613,7 +626,8 @@ function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.warningCount = 0;
 	wpgptAllPageWarningsState.ui.content.hidden = true;
 	wpgptAllPageWarningsState.ui.results.replaceChildren();
-	wpgptAllPageWarningsState.ui.pagination.replaceChildren();
+	wpgptAllPageWarningsState.ui.paginationTop.replaceChildren();
+	wpgptAllPageWarningsState.ui.paginationBottom.replaceChildren();
 }
 
 async function wpgpt_all_page_warnings_scan() {
@@ -796,9 +810,13 @@ function wpgpt_all_page_warnings_build_ui() {
 	toolbar.append( range, pageSize, resultPage, rescan );
 	content.appendChild( toolbar );
 
+	const paginationTop = wpgpt_all_page_warnings_create_element(
+		'div',
+		'wpgpt-all-page-warnings__pagination is-top'
+	);
 	const results = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__results' );
-	const pagination = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__pagination' );
-	content.append( results, pagination );
+	const paginationBottom = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__pagination' );
+	content.append( paginationTop, results, paginationBottom );
 	root.appendChild( content );
 
 	wpgptAllPageWarningsState.ui = {
@@ -815,7 +833,8 @@ function wpgpt_all_page_warnings_build_ui() {
 		range,
 		resultPage,
 		results,
-		pagination,
+		paginationTop,
+		paginationBottom,
 	};
 
 	return root;
@@ -842,6 +861,7 @@ globalThis.wpgpt_all_page_warnings_test_api = {
 	filterResults: wpgpt_all_page_warnings_filter_results,
 	summarize: wpgpt_all_page_warnings_summarize,
 	paginate: wpgpt_all_page_warnings_paginate,
+	ruleOptions: wpgpt_all_page_warnings_rule_options,
 	collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
 };
 
