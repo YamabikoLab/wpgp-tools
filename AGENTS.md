@@ -7,9 +7,6 @@ These instructions apply to the entire repository.
 - Make the smallest change that fully satisfies the current issue.
 - Keep documentation aligned with code, commands, dependencies, and directories that exist on the current branch.
 - Introduce shared abstractions only after a concrete shared responsibility exists.
-- Keep Gutenberg-specific and Divi-specific integration responsibilities outside shared logic.
-- Prefer public WordPress and Divi APIs at integration boundaries.
-- Do not commit generated dependencies or build output such as `node_modules/`, `vendor/`, or `build/`.
 - Do not commit secrets, credentials, personal paths, machine names, or other local-only environment details.
 
 ## Communication
