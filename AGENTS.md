@@ -35,6 +35,17 @@ These instructions apply to the entire repository.
 - Avoid required fixes for low-frequency, low-impact presentation edge cases when the proposed complexity outweighs the impact.
 - Do not add coordination layers, state, IDs, queues, or abstractions solely to eliminate negligible edge cases.
 
+## Fork and upstream safety
+
+- Treat the upstream repository `vlad-timotei/wpgp-tools` as read-only unless the user explicitly authorizes an upstream mutation in the current request.
+- By default, all branches, commits, pushes, issues, comments, pull requests, reviews, releases, tags, and GitHub Actions mutations must target `YamabikoLab/wpgp-tools`.
+- Do not create, update, close, merge, label, comment on, review, or otherwise mutate upstream issues or pull requests merely because upstream content is referenced during the task.
+- Do not change Git remotes, push destinations, or pull request base/head repositories to upstream without explicit user authorization.
+- Keep YamabikoLab-specific behavior isolated from upstream-derived code where practical. Prefer new fork-owned files, adapters, or integration points over embedding fork-specific responsibilities into upstream-derived files.
+- Keep `src/js/wpgpt-checks.js` self-contained and suitable for reuse or proposal upstream. Do not introduce dependencies on YamabikoLab-only files, UI, storage conventions, or build infrastructure unless the requested work explicitly requires it.
+- When modifying upstream-derived files, make the smallest necessary diff and avoid unrelated formatting, renaming, restructuring, or refactoring that would make future upstream synchronization harder.
+- If a change appears suitable for upstream, implement and validate it in the YamabikoLab fork first. Do not publish, propose, or submit it upstream automatically; report it as a possible upstream candidate and wait for explicit user authorization.
+
 ## GitHub Actions
 
 - Keep workflows narrowly scoped to their intended validation or security purpose.
