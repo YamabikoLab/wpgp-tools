@@ -243,6 +243,104 @@ describe( 'Japanese Warning highlight ranges', () => {
 	} );
 } );
 
+
+describe( 'PO export scanning', () => {
+	test( 'builds a PO export URL from the GlotPress filtered export link', () => {
+		const api = loadAllPageWarnings();
+		const pageDocument = {
+			querySelector( selector ) {
+				assert.equal( selector, 'a#export' );
+				return {
+					getAttribute( name ) {
+						if ( 'filters' === name ) {
+							return '/projects/example/ja/default/export-translations/?filters%5Bstatus%5D=current';
+						}
+						return null;
+					},
+				};
+			},
+		};
+
+		const url = api.buildExportUrl(
+			pageDocument,
+			'https://translate.wordpress.org/projects/example/ja/default/'
+		);
+
+		assert.equal(
+			url,
+			'https://translate.wordpress.org/projects/example/ja/default/export-translations/?filters%5Bstatus%5D=current&format=po'
+		);
+	} );
+
+	test( 'builds a GlotPress original-search URL without the export path', () => {
+		const api = loadAllPageWarnings();
+		const url = new URL(
+			api.buildSourceUrl(
+				'https://translate.wordpress.org/projects/example/ja/default/export-translations/?filters%5Bstatus%5D=current&format=po',
+				'Hello world'
+			)
+		);
+
+		assert.equal( url.pathname, '/projects/example/ja/default/' );
+		assert.equal( url.searchParams.get( 'filters[status]' ), 'current' );
+		assert.equal( url.searchParams.get( 'filters[term]' ), 'Hello world' );
+		assert.equal( url.searchParams.get( 'filters[term_scope]' ), 'scope_originals' );
+		assert.equal( url.searchParams.has( 'format' ), false );
+	} );
+
+	test( 'parses singular, plural, context, multiline, and escaped PO values', () => {
+		const api = loadAllPageWarnings();
+		const entries = normalize( api.parsePo(
+			[
+				'msgid ""',
+				'msgstr ""',
+				'"Project-Id-Version: Example\\\\n"',
+				'',
+				'msgctxt "button"',
+				'msgid ""',
+				'"Save "',
+				'"changes"',
+				'msgstr "変更を保存"',
+				'',
+				'msgid "One file"',
+				'msgid_plural "%d files"',
+				'msgstr[0] "1個のファイル"',
+				'msgstr[1] "%d個のファイル"',
+				'',
+				'msgid "Line\\\\nbreak"',
+				'msgstr "改行\\\\nあり"',
+			].join( '\\n' )
+		) );
+
+		assert.equal( entries.length, 3 );
+		assert.deepEqual( entries[ 0 ], {
+			context: 'button',
+			msgid: 'Save changes',
+			msgidPlural: null,
+			translations: [ '変更を保存' ],
+		} );
+		assert.deepEqual( entries[ 1 ], {
+			context: null,
+			msgid: 'One file',
+			msgidPlural: '%d files',
+			translations: [ '1個のファイル', '%d個のファイル' ],
+		} );
+		assert.deepEqual( entries[ 2 ], {
+			context: null,
+			msgid: 'Line\\nbreak',
+			msgidPlural: null,
+			translations: [ '改行\\nあり' ],
+		} );
+	} );
+
+	test( 'does not treat an HTML response as a PO export', () => {
+		const api = loadAllPageWarnings();
+
+		assert.equal( api.isPo( '<!doctype html><title>Login</title>' ), false );
+		assert.equal( api.isPo( 'msgid "Hello"\\nmsgstr "こんにちは"' ), true );
+	} );
+} );
+
 describe( 'unsaved translation tracking', () => {
 	test( 'becomes dirty only while the current value differs from its saved baseline', () => {
 		const api = loadAllPageWarnings();
