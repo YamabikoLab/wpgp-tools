@@ -146,6 +146,19 @@ describe( 'all-page Warning result filtering', () => {
 		assert.ok( filtered[ 0 ].displayWarnings[ 0 ].text.startsWith( '1-4 ' ) );
 	} );
 
+	test( 'rule filter options omit zero-count rules and include the 件 unit', () => {
+		const api = loadAllPageWarnings();
+		const options = normalize( api.ruleOptions( sampleResults() ) );
+
+		assert.deepEqual(
+			options.map( ( option ) => [ option.setting, option.countLabel ] ),
+			[
+				[ 'ja_punctuation', '1件' ],
+				[ 'ja_half_full_spacing', '1件' ],
+			]
+		);
+	} );
+
 	test( 'pagination slices affected strings without altering the full result set', () => {
 		const api = loadAllPageWarnings();
 		const results = Array.from( { length: 96 }, ( _, index ) => ( {
