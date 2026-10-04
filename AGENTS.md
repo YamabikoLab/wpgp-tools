@@ -38,7 +38,6 @@ These instructions apply to the entire repository.
 ## GitHub Actions
 
 - Keep workflows narrowly scoped to their intended validation or security purpose.
-- When `.github/workflows/` changes, review the final diff for unrelated changes and obsolete assumptions.
 - Treat GitHub-hosted Actions as the authoritative CI result.
 
 ## Validation
