@@ -850,7 +850,7 @@ async function wpgpt_all_page_warnings_scan() {
 	wpgpt_all_page_warnings_register_textareas();
 	if ( wpgptAllPageWarningsState.dirtyTracker.hasDirty() ) {
 		wpgpt_all_page_warnings_set_status(
-			'未保存の編集があります。翻訳を保存してから、もう一度全ページ確認を実行してください。',
+			'未保存の編集があります。翻訳を保存してから、もう一度全件確認を実行してください。',
 			'warning'
 		);
 		return;
@@ -896,14 +896,14 @@ function wpgpt_all_page_warnings_build_ui() {
 	const head = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__head' );
 	const titleWrap = document.createElement( 'div' );
 	titleWrap.append(
-		wpgpt_all_page_warnings_create_element( 'h2', '', '全ページの Warning を確認' ),
+		wpgpt_all_page_warnings_create_element( 'h2', '', '全件の Warning を確認' ),
 		wpgpt_all_page_warnings_create_element(
 			'p',
 			'',
 			'現在の検索・ステータス等を反映した翻訳データを一度だけ取得し、ブラウザー内で Warning を確認します。'
 		)
 	);
-	const scan = wpgpt_all_page_warnings_create_element( 'button', 'button is-primary', 'Scan all pages for warnings' );
+	const scan = wpgpt_all_page_warnings_create_element( 'button', 'button is-primary', 'Scan all warnings' );
 	scan.type = 'button';
 	scan.addEventListener( 'click', wpgpt_all_page_warnings_scan );
 	head.append( titleWrap, scan );
