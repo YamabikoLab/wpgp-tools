@@ -129,6 +129,11 @@
 	box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
 }
 
+.wpgpt-all-page-warnings__rule-close {
+	display: block;
+	margin: 0 0 8px auto;
+}
+
 .wpgpt-all-page-warnings__rule {
 	display: grid;
 	grid-template-columns: 22px 1fr auto;
