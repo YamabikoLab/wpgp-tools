@@ -269,6 +269,10 @@
 	margin-top: 14px;
 }
 
+.wpgpt-all-page-warnings__pagination.is-top {
+	margin: 0 0 14px;
+}
+
 .wpgpt-all-page-warnings__pagination button {
 	min-width: 32px;
 	height: 32px;
