@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>WPGP Tools - All Page Warnings Rule Filter Mock</title>
+<title>WPGP Tools - PO Export Warning Scan Mock</title>
 <style>
 :root {
   --wp-blue: #0073aa;
@@ -106,8 +106,6 @@ table.translations th:last-child, table.translations td:last-child { width: 74px
 .button.primary { background: #2271b1; color: white; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 .status { padding: 16px 20px; border-bottom: 1px solid #ddd; display: none; }
-.progressbar { height: 8px; background: #eee; border-radius: 8px; overflow: hidden; margin-top: 9px; }
-.progressbar > div { height: 100%; width: 0; background: #2271b1; transition: width .18s linear; }
 
 .summary { display: none; padding: 18px 20px 6px; }
 .summary-grid { display: flex; gap: 18px; flex-wrap: wrap; }
@@ -163,12 +161,8 @@ table.translations th:last-child, table.translations td:last-child { width: 74px
 .results-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 15px 0; }
 .results-toolbar .spacer { flex: 1; }
 select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white; }
-.result-group { margin-bottom: 22px; }
-.result-group h3 { margin: 0 0 8px; font-size: 15px; background: #f0f0f1; padding: 9px 11px; border-left: 4px solid #8c8f94; }
 .result-card { border: 1px solid #dcdcde; margin-bottom: 9px; background: #fff; }
 .result-card__head { display: flex; gap: 10px; align-items: center; background: #f6f7f7; border-bottom: 1px solid #ddd; padding: 9px 11px; }
-.result-card__head .id { font-weight: 600; }
-.result-card__head .page-origin { color: var(--wp-muted); }
 .result-card__head .spacer { flex: 1; }
 .result-card__body { padding: 11px 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
 .field label { display: block; color: var(--wp-muted); font-size: 12px; margin-bottom: 3px; }
@@ -224,24 +218,23 @@ select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white
   <section class="warning-tool">
     <div class="warning-tool__head">
       <div>
-        <h2>全ページの Warning を確認</h2>
-        <p>現在の検索条件の全ページを確認し、Warning がある文字列をまとめて表示します。</p>
+        <h2>全件の Warning を確認</h2>
+        <p>現在の検索・ステータス等を反映した翻訳データを一度だけ取得し、ブラウザー内で Warning を確認します。</p>
       </div>
       <div class="spacer"></div>
-      <button class="button primary" id="scanBtn">全ページを確認</button>
+      <button class="button primary" id="scanBtn">全件を確認</button>
     </div>
 
     <div class="status" id="statusBox">
-      <div id="statusText">Scanning...</div>
-      <div class="progressbar"><div id="progress"></div></div>
+      <div id="statusText">翻訳データを取得しています…</div>
     </div>
 
     <div class="summary" id="summary">
-      <div class="success-line">✓ 全12ページを確認しました</div>
+      <div class="success-line" id="successLine">✓ 1,240件の翻訳文字列を確認しました。</div>
       <div class="summary-grid" style="margin-top:12px">
         <div class="metric"><strong id="metricWarnings">328</strong><span>Warning</span></div>
         <div class="metric"><strong id="metricStrings">96</strong><span>影響する文字列</span></div>
-        <div class="metric"><strong>12</strong><span>確認した GlotPress ページ</span></div>
+        <div class="metric"><strong id="metricChecked">1240</strong><span>確認した翻訳文字列</span></div>
       </div>
     </div>
 
@@ -261,7 +254,7 @@ select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white
         <div class="selected-chips" id="selectedChips"></div>
         <div class="filter-meta" id="filterMeta">すべての Warning を表示</div>
       </div>
-      <div class="hint">複数ルールを選んだ場合は「いずれかのルールを含む文字列」を表示します。結果の切り替えでは再走査しません。</div>
+      <div class="hint">複数ルールを選んだ場合は「いずれかのルールを含む文字列」を表示します。フィルターや結果ページの切り替えでは再取得しません。</div>
     </div>
 
     <div class="results" id="results">
@@ -273,8 +266,9 @@ select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white
         <span id="resultPageText">結果 1 / 4ページ</span>
         <button class="button" id="rescanBtn">もう一度確認</button>
       </div>
+      <div class="pagination" id="paginationTop"></div>
       <div id="resultList"></div>
-      <div class="pagination" id="pagination"></div>
+      <div class="pagination" id="paginationBottom"></div>
     </div>
   </section>
 </main>
@@ -332,7 +326,6 @@ function makeItems() {
     }
     items.push({
       id: 12000 + i * 7,
-      gpPage: (i % 12) + 1,
       original: originals[i % originals.length] + (i>11 ? ` (${i+1})` : ''),
       translation: translations[i % translations.length] + (i>11 ? ` (${i+1})` : ''),
       warnings
@@ -356,7 +349,7 @@ function renderRuleOptions(filter='') {
     <label class="rule-option">
       <input type="checkbox" data-rule="${r.id}" ${pendingRules.has(r.id)?'checked':''} />
       <span><strong>${r.id}</strong> ${r.name}</span>
-      <span class="rule-count">${r.count}</span>
+      <span class="rule-count">${r.count}件</span>
     </label>`).join('');
   document.querySelectorAll('[data-rule]').forEach(cb => cb.addEventListener('change', e => {
     if (e.target.checked) pendingRules.add(e.target.dataset.rule); else pendingRules.delete(e.target.dataset.rule);
@@ -396,31 +389,19 @@ function renderResults() {
   const start = (page-1)*size;
   const visible = filtered.slice(start, start+size);
 
-  const grouped = new Map();
-  visible.forEach(item => {
-    if (!grouped.has(item.gpPage)) grouped.set(item.gpPage, []);
-    grouped.get(item.gpPage).push(item);
-  });
-  const sortedPages = [...grouped.keys()].sort((a,b)=>a-b);
   let html='';
-  sortedPages.forEach(gp => {
-    const arr = grouped.get(gp);
-    const warningCount = countFilteredWarnings(arr);
-    html += `<div class="result-group"><h3>GlotPress Page ${gp} — ${arr.length}文字列 / ${warningCount} Warning</h3>`;
-    arr.forEach(item => {
-      let warnings = selectedRules.size ? item.warnings.filter(w=>selectedRules.has(w.rule)) : item.warnings;
-      html += `<article class="result-card">
-        <div class="result-card__head"><span class="id">#${item.id}</span><span class="page-origin">GlotPress Page ${item.gpPage}</span><span class="spacer"></span><a>Page ${item.gpPage} で開く ↗</a></div>
-        <div class="result-card__body">
-          <div class="field"><label>原文</label><div>${item.original}</div></div>
-          <div class="field"><label>翻訳</label><div>${item.translation}</div></div>
-          <div class="warnings"><label style="color:#646970;font-size:12px">Warning</label>
-            ${warnings.map(w=>`<div class="warning-item"><span class="rule-badge ${w.general?'general':''}">${w.rule}</span><span>${w.label}</span></div>`).join('')}
-          </div>
+  visible.forEach(item => {
+    const warnings = selectedRules.size ? item.warnings.filter(w=>selectedRules.has(w.rule)) : item.warnings;
+    html += `<article class="result-card">
+      <div class="result-card__head"><strong>翻訳文字列</strong><span class="spacer"></span><a>GlotPressで確認 ↗</a></div>
+      <div class="result-card__body">
+        <div class="field"><label>原文</label><div>${item.original}</div></div>
+        <div class="field"><label>翻訳</label><div>${item.translation}</div></div>
+        <div class="warnings"><label style="color:#646970;font-size:12px">Warning</label>
+          ${warnings.map(w=>`<div class="warning-item"><span class="rule-badge ${w.general?'general':''}">${w.rule}</span><span>${w.label}</span></div>`).join('')}
         </div>
-      </article>`;
-    });
-    html += '</div>';
+      </div>
+    </article>`;
   });
   if (!visible.length) html = '<div class="empty">選択したルールに該当する Warning はありません。</div>';
   $('resultList').innerHTML = html;
@@ -444,13 +425,15 @@ function renderResults() {
     }
     phtml += `<button ${page===pages?'disabled':''} data-p="${page+1}">→</button>`;
   }
-  $('pagination').innerHTML = phtml;
-  document.querySelectorAll('#pagination [data-p]').forEach(b => b.addEventListener('click', e => {
-    if (e.currentTarget.disabled) return;
-    page = Number(e.currentTarget.dataset.p);
-    renderResults();
-    document.querySelector('.warning-tool').scrollIntoView({behavior:'smooth', block:'start'});
-  }));
+  ['paginationTop','paginationBottom'].forEach(id => {
+    $(id).innerHTML = phtml;
+    document.querySelectorAll(`#${id} [data-p]`).forEach(b => b.addEventListener('click', e => {
+      if (e.currentTarget.disabled) return;
+      page = Number(e.currentTarget.dataset.p);
+      renderResults();
+      document.querySelector('.warning-tool').scrollIntoView({behavior:'smooth', block:'start'});
+    }));
+  });
 }
 
 async function scan() {
@@ -461,13 +444,12 @@ async function scan() {
   $('summary').style.display = 'none';
   $('filtersArea').style.display = 'none';
   $('results').style.display = 'none';
-  for (let i=1;i<=12;i++) {
-    $('statusText').textContent = `Scanning... ${i} / 12 pages checked · ${Math.round((i/12)*328)} warnings found`;
-    $('progress').style.width = `${i/12*100}%`;
-    await sleep(110);
-  }
+  $('statusText').textContent = '翻訳データを取得しています…';
+  await sleep(350);
+  $('statusText').textContent = '1,240件の翻訳データを確認しています…';
+  await sleep(450);
   scanned = true;
-  $('statusText').textContent = 'Scan complete.';
+  $('statusText').textContent = '✓ 1,240件の翻訳文字列を確認しました。';
   await sleep(180);
   $('statusBox').style.display = 'none';
   $('summary').style.display = 'block';
