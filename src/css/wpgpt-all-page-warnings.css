@@ -237,6 +237,13 @@
 	overflow-wrap: anywhere;
 }
 
+.wpgpt-all-page-warnings__highlight {
+	padding: 0;
+	background: #ffec99;
+	box-shadow: inset 0 -2px 0 #dba617;
+	color: inherit;
+}
+
 .wpgpt-all-page-warnings__warnings {
 	grid-column: 1 / -1;
 }
