@@ -434,6 +434,17 @@ function wpgpt_all_page_warnings_render_rule_options() {
 	const container = wpgptAllPageWarningsState.ui.ruleOptions;
 	container.replaceChildren();
 
+	const close = wpgpt_all_page_warnings_create_element(
+		'button',
+		'button wpgpt-all-page-warnings__rule-close',
+		'× 閉じる'
+	);
+	close.type = 'button';
+	close.addEventListener( 'click', () => {
+		container.closest( 'details' ).open = false;
+	} );
+	container.appendChild( close );
+
 	wpgpt_all_page_warnings_rule_options( wpgptAllPageWarningsState.results ).forEach( ( rule ) => {
 		const label = wpgpt_all_page_warnings_create_element( 'label', 'wpgpt-all-page-warnings__rule' );
 		const checkbox = document.createElement( 'input' );
