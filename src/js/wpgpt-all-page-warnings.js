@@ -1018,7 +1018,6 @@ globalThis.wpgpt_all_page_warnings_test_api = {
 	buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 	isPo: wpgpt_all_page_warnings_is_po,
 	parsePo: wpgpt_all_page_warnings_parse_po,
-	analyzeEntries: wpgpt_all_page_warnings_analyze_entries,
 };
 
 if ( 'undefined' !== typeof document && 'undefined' !== typeof window ) {
