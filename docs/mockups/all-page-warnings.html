@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WPGP Tools - All Page Warnings Rule Filter Mock</title>
+<style>
+:root {
+  --wp-blue: #0073aa;
+  --wp-blue-2: #0085ba;
+  --wp-border: #c3c4c7;
+  --wp-bg: #f6f7f7;
+  --wp-text: #1d2327;
+  --wp-muted: #646970;
+  --warn-bg: #fff8e5;
+  --warn-border: #dba617;
+  --success-bg: #edfaef;
+  --success: #008a20;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  color: var(--wp-text);
+  background: white;
+  font-size: 14px;
+}
+a { color: #2271b1; text-decoration: underline; cursor: pointer; }
+.topbar {
+  background: #23282d;
+  color: white;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  gap: 26px;
+  font-size: 13px;
+}
+.logo { font-size: 25px; font-weight: 700; }
+.toplinks { display: flex; gap: 22px; flex: 1; }
+.wpbtn { margin-left: auto; background: #3858e9; color: white; border: 0; padding: 10px 18px; font-weight: 600; }
+.subbar {
+  background: #0675a8;
+  color: white;
+  padding: 16px calc((100% - 1425px)/2);
+  display: flex;
+  align-items: center;
+  min-height: 62px;
+}
+.subbar .title { font-size: 25px; font-weight: 300; }
+.subbar nav { margin-left: auto; display: flex; gap: 28px; }
+.subbar a { color: white; }
+.notice {
+  background: #e5f5fb;
+  padding: 14px 20px;
+  margin: 0 9px;
+  text-align: center;
+}
+.wrap { max-width: 1425px; margin: 0 auto; padding: 22px 0 60px; }
+.breadcrumbs { color: #2271b1; margin-bottom: 18px; }
+.info { background: #e8f6fb; border-left: 3px solid #00a0d2; padding: 12px 14px; margin-bottom: 15px; }
+h1 { font-size: 23px; font-weight: 400; margin: 10px 0 20px; }
+.project-links { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+.paging-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.current-filters { display: flex; gap: 12px; color: #2271b1; }
+.pagebox { border: 1px solid #a7aaad; min-width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; background: white; }
+table.translations { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.translations th, table.translations td { border: 1px solid #a7aaad; padding: 9px 11px; vertical-align: top; }
+table.translations th { background: #f6f7f7; text-align: left; }
+table.translations td { background: #bce5c1; }
+table.translations th:last-child, table.translations td:last-child { width: 74px; text-align: center; }
+
+.warning-tool {
+  margin-top: 20px;
+  border: 1px solid var(--wp-border);
+  background: white;
+  box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+.warning-tool__head {
+  padding: 18px 20px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  border-bottom: 1px solid #ddd;
+  background: #fbfbfc;
+}
+.warning-tool__head h2 { margin: 0 0 5px; font-size: 18px; }
+.warning-tool__head p { margin: 0; color: var(--wp-muted); }
+.warning-tool__head .spacer { flex: 1; }
+.button {
+  appearance: none;
+  border: 1px solid #2271b1;
+  color: #2271b1;
+  background: white;
+  border-radius: 3px;
+  padding: 8px 13px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.button.primary { background: #2271b1; color: white; }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+.status { padding: 16px 20px; border-bottom: 1px solid #ddd; display: none; }
+.progressbar { height: 8px; background: #eee; border-radius: 8px; overflow: hidden; margin-top: 9px; }
+.progressbar > div { height: 100%; width: 0; background: #2271b1; transition: width .18s linear; }
+
+.summary { display: none; padding: 18px 20px 6px; }
+.summary-grid { display: flex; gap: 18px; flex-wrap: wrap; }
+.metric { min-width: 170px; background: var(--wp-bg); border: 1px solid #dcdcde; padding: 13px 15px; }
+.metric strong { font-size: 24px; display: block; font-weight: 600; }
+.metric span { color: var(--wp-muted); }
+
+.filters-area {
+  display: none;
+  padding: 14px 20px;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+}
+.filters-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rule-filter-wrap { position: relative; }
+.rule-filter-menu {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  z-index: 10;
+  width: 460px;
+  max-height: 430px;
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #8c8f94;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  padding: 10px;
+  display: none;
+}
+.rule-filter-menu.open { display: block; }
+.rule-search { width: 100%; border: 1px solid #8c8f94; padding: 8px 10px; margin-bottom: 8px; }
+.rule-options { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.rule-option { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 8px; border-radius: 3px; }
+.rule-option:hover { background: #f0f0f1; }
+.rule-option small { color: var(--wp-muted); }
+.rule-count { color: var(--wp-muted); font-variant-numeric: tabular-nums; }
+.rule-menu-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd; }
+.selected-chips { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #c3c4c7;
+  border-radius: 16px;
+  padding: 5px 9px;
+  background: #f6f7f7;
+}
+.chip button { border: 0; background: transparent; cursor: pointer; color: #646970; padding: 0; font-size: 16px; line-height: 1; }
+.filter-meta { margin-left: auto; color: var(--wp-muted); }
+
+.results { display: none; padding: 0 20px 20px; }
+.results-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 15px 0; }
+.results-toolbar .spacer { flex: 1; }
+select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white; }
+.result-group { margin-bottom: 22px; }
+.result-group h3 { margin: 0 0 8px; font-size: 15px; background: #f0f0f1; padding: 9px 11px; border-left: 4px solid #8c8f94; }
+.result-card { border: 1px solid #dcdcde; margin-bottom: 9px; background: #fff; }
+.result-card__head { display: flex; gap: 10px; align-items: center; background: #f6f7f7; border-bottom: 1px solid #ddd; padding: 9px 11px; }
+.result-card__head .id { font-weight: 600; }
+.result-card__head .page-origin { color: var(--wp-muted); }
+.result-card__head .spacer { flex: 1; }
+.result-card__body { padding: 11px 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+.field label { display: block; color: var(--wp-muted); font-size: 12px; margin-bottom: 3px; }
+.warnings { grid-column: 1 / -1; }
+.warning-item { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 8px 10px; margin-top: 6px; display: flex; gap: 8px; align-items: flex-start; }
+.rule-badge { flex: none; background: #f0b849; color: #2c2c2c; border-radius: 3px; padding: 2px 6px; font-weight: 600; font-size: 12px; }
+.rule-badge.general { background: #c3c4c7; }
+.pagination { display: flex; justify-content: center; gap: 5px; margin-top: 16px; flex-wrap: wrap; }
+.pagination button { min-width: 34px; height: 34px; border: 1px solid #8c8f94; background: white; cursor: pointer; }
+.pagination button.active { background: #2271b1; border-color: #2271b1; color: white; }
+.empty { padding: 30px 15px; text-align: center; color: var(--wp-muted); border: 1px dashed #c3c4c7; }
+.success-line { color: var(--success); font-weight: 600; }
+.hint { margin-top: 10px; color: var(--wp-muted); font-size: 13px; }
+@media (max-width: 820px) {
+  .wrap { padding-left: 12px; padding-right: 12px; }
+  .subbar { padding-left: 12px; padding-right: 12px; }
+  .result-card__body { grid-template-columns: 1fr; }
+  .warnings { grid-column: 1; }
+  .rule-filter-menu { width: min(92vw, 460px); }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">W</div>
+  <div class="toplinks"><span>Showcase</span><span>Plugins</span><span>Themes</span><span>Hosting</span><span>News</span><span>Resources</span><span>About</span></div>
+  <span>Log In</span><span>Register</span><button class="wpbtn">Get WordPress</button>
+</div>
+<div class="subbar"><div class="title">Translating WordPress</div><nav><a>Teams</a><a>Events</a><a>Handbook</a><a>Get News</a><a>WPGPT Settings</a></nav></div>
+<div class="notice">For a better unified experience, features merged in GlotDict will soon become unavailable in WPGPT! Please consider using <a>GlotDict</a>.</div>
+
+<main class="wrap">
+  <div class="breadcrumbs">Projects / Plugins / Yamabiko Table Reorder / Stable (latest release) / Japanese</div>
+  <div class="info">New to Translating WordPress? Read through our <a>Translator Handbook</a> to get started.</div>
+  <h1>Translation of Stable (latest release): Japanese</h1>
+  <div class="project-links">
+    <a>Filter ↓</a> • <a>Sort ↓</a> • <a><strong>All (55)</strong></a> • <a>Translated (55)</a> • <a>Untranslated (0)</a> • <a>Waiting (0)</a> • <a>Changes requested (0)</a> • <a>Fuzzy (0)</a> • <a>Warnings (0)</a>
+  </div>
+  <div class="paging-row">
+    <div class="current-filters"><span>⚠ Notices (0)</span><span>⚠️ Warnings (0)</span><span>All</span></div>
+    <span class="pagebox">←</span><span>1</span><span class="pagebox">2</span><span class="pagebox">3</span><span>…</span><span class="pagebox">4</span><span class="pagebox">→</span>
+  </div>
+  <table class="translations">
+    <thead><tr><th>Original string</th><th>Translation</th><th>—</th></tr></thead>
+    <tbody>
+      <tr><td>https://yamabikolab.com/</td><td>https://yamabikolab.com/</td><td>✓<br><a>Details</a></td></tr>
+      <tr><td>Column drag reordering is unavailable in the current view.</td><td>現在の表示では列のドラッグ並び替えを使用できません。</td><td>✓<br><a>Details</a></td></tr>
+      <tr><td>Reorder rows</td><td>行を並び替え</td><td>✓<br><a>Details</a></td></tr>
+      <tr><td>Reorder columns</td><td>列を並び替え</td><td>✓<br><a>Details</a></td></tr>
+    </tbody>
+  </table>
+
+  <section class="warning-tool">
+    <div class="warning-tool__head">
+      <div>
+        <h2>全ページの Warning を確認</h2>
+        <p>現在の検索条件の全ページを確認し、Warning がある文字列をまとめて表示します。</p>
+      </div>
+      <div class="spacer"></div>
+      <button class="button primary" id="scanBtn">全ページを確認</button>
+    </div>
+
+    <div class="status" id="statusBox">
+      <div id="statusText">Scanning...</div>
+      <div class="progressbar"><div id="progress"></div></div>
+    </div>
+
+    <div class="summary" id="summary">
+      <div class="success-line">✓ 全12ページを確認しました</div>
+      <div class="summary-grid" style="margin-top:12px">
+        <div class="metric"><strong id="metricWarnings">328</strong><span>Warning</span></div>
+        <div class="metric"><strong id="metricStrings">96</strong><span>影響する文字列</span></div>
+        <div class="metric"><strong>12</strong><span>確認した GlotPress ページ</span></div>
+      </div>
+    </div>
+
+    <div class="filters-area" id="filtersArea">
+      <div class="filters-row">
+        <div class="rule-filter-wrap">
+          <button class="button" id="ruleFilterBtn">ルールで絞り込む ▾</button>
+          <div class="rule-filter-menu" id="ruleMenu">
+            <input class="rule-search" id="ruleSearch" placeholder="ルール番号・名称で検索" />
+            <div class="rule-options" id="ruleOptions"></div>
+            <div class="rule-menu-actions">
+              <button class="button" id="clearRules">すべて解除</button>
+              <button class="button primary" id="applyRules">適用</button>
+            </div>
+          </div>
+        </div>
+        <div class="selected-chips" id="selectedChips"></div>
+        <div class="filter-meta" id="filterMeta">すべての Warning を表示</div>
+      </div>
+      <div class="hint">複数ルールを選んだ場合は「いずれかのルールを含む文字列」を表示します。結果の切り替えでは再走査しません。</div>
+    </div>
+
+    <div class="results" id="results">
+      <div class="results-toolbar">
+        <strong id="rangeText">1–25 / 96文字列</strong>
+        <span>表示:</span>
+        <select id="pageSize"><option>25</option><option>50</option><option>100</option></select><span>件ずつ</span>
+        <div class="spacer"></div>
+        <span id="resultPageText">結果 1 / 4ページ</span>
+        <button class="button" id="rescanBtn">もう一度確認</button>
+      </div>
+      <div id="resultList"></div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const RULES = [
+  {id:'1-1', name:'日本語の句読点', count:42},
+  {id:'1-2', name:'英数字・記号の半角表記', count:31},
+  {id:'1-4', name:'半角文字と全角文字の間のスペース', count:74},
+  {id:'1-5', name:'半角丸括弧と前後スペース', count:58},
+  {id:'1-6', name:'丸括弧内側の不要スペース', count:17},
+  {id:'1-7', name:'括弧内末尾の句点', count:12},
+  {id:'1-8', name:'文末括弧と句点の位置', count:14},
+  {id:'1-9', name:'半角数字前後の不要スペース', count:33},
+  {id:'3-2', name:'「View XX」の訳し方', count:7},
+  {id:'3-3', name:'「not allowed to」の権限表現', count:6},
+  {id:'3-4', name:'「Sorry, ...」の Sorry を訳さない', count:9},
+  {id:'3-6', name:'推奨表記', count:19},
+  {id:'5', name:'中点「・」', count:6}
+];
+const generalRules = [
+  {id:'GEN-PH', name:'プレースホルダーの不一致'},
+  {id:'GEN-DS', name:'連続スペース'},
+  {id:'GEN-TAG', name:'タグ周辺のスペース'}
+];
+
+function makeItems() {
+  const originals = [
+    'Open settings (advanced)', 'Sorry, you are not allowed to edit this item.', 'View details',
+    'Version 2.1 is available', 'Status: Active', 'Reorder rows and columns',
+    'Use WordPress.org account', 'Select an option (required)', 'Example: Sample text',
+    'Your site is ready.', 'Open the plugin settings', 'Item 12 is selected'
+  ];
+  const translations = [
+    '設定(詳細)を開く', 'すみません、この項目を編集する権限がありません。', '詳細を表示',
+    'バージョン 2.1 が利用できます', '状態:有効', '行と列を並び替え',
+    'WordPress.orgアカウントを使用', 'オプション ( 必須 ) を選択', '例: サンプルテキスト',
+    'サイトの準備ができました。', 'プラグイン設定を開く', '項目 12 が選択されています'
+  ];
+  const items = [];
+  for (let i=0;i<96;i++) {
+    const baseRule = RULES[i % RULES.length];
+    const warnings = [{rule:baseRule.id, label:baseRule.name}];
+    if (i % 3 === 0) {
+      const r = RULES[(i+2) % RULES.length];
+      warnings.push({rule:r.id, label:r.name});
+    }
+    if (i % 7 === 0) {
+      const r = RULES[(i+5) % RULES.length];
+      warnings.push({rule:r.id, label:r.name});
+    }
+    if (i % 10 === 0) {
+      const g = generalRules[i % generalRules.length];
+      warnings.push({rule:g.id, label:g.name, general:true});
+    }
+    items.push({
+      id: 12000 + i * 7,
+      gpPage: (i % 12) + 1,
+      original: originals[i % originals.length] + (i>11 ? ` (${i+1})` : ''),
+      translation: translations[i % translations.length] + (i>11 ? ` (${i+1})` : ''),
+      warnings
+    });
+  }
+  return items;
+}
+
+const allItems = makeItems();
+let selectedRules = new Set();
+let pendingRules = new Set();
+let page = 1;
+let scanned = false;
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function renderRuleOptions(filter='') {
+  const query = filter.trim().toLowerCase();
+  $('ruleOptions').innerHTML = RULES.filter(r => (`${r.id} ${r.name}`).toLowerCase().includes(query)).map(r => `
+    <label class="rule-option">
+      <input type="checkbox" data-rule="${r.id}" ${pendingRules.has(r.id)?'checked':''} />
+      <span><strong>${r.id}</strong> ${r.name}</span>
+      <span class="rule-count">${r.count}</span>
+    </label>`).join('');
+  document.querySelectorAll('[data-rule]').forEach(cb => cb.addEventListener('change', e => {
+    if (e.target.checked) pendingRules.add(e.target.dataset.rule); else pendingRules.delete(e.target.dataset.rule);
+  }));
+}
+
+function currentItems() {
+  if (!selectedRules.size) return allItems;
+  return allItems.filter(item => item.warnings.some(w => selectedRules.has(w.rule)));
+}
+
+function countFilteredWarnings(items) {
+  if (!selectedRules.size) return items.reduce((n,item)=>n+item.warnings.length,0);
+  return items.reduce((n,item)=>n+item.warnings.filter(w => selectedRules.has(w.rule)).length,0);
+}
+
+function renderChips() {
+  const chips = [...selectedRules].map(id => {
+    const rule = RULES.find(r=>r.id===id);
+    return `<span class="chip"><strong>${rule.id}</strong> ${rule.name}<button aria-label="remove" data-remove="${id}">×</button></span>`;
+  }).join('');
+  $('selectedChips').innerHTML = chips;
+  document.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', e => {
+    selectedRules.delete(e.currentTarget.dataset.remove);
+    pendingRules = new Set(selectedRules);
+    page = 1;
+    renderChips();
+    renderResults();
+  }));
+}
+
+function renderResults() {
+  const filtered = currentItems();
+  const size = Number($('pageSize').value);
+  const pages = Math.max(1, Math.ceil(filtered.length / size));
+  page = Math.min(page, pages);
+  const start = (page-1)*size;
+  const visible = filtered.slice(start, start+size);
+
+  const grouped = new Map();
+  visible.forEach(item => {
+    if (!grouped.has(item.gpPage)) grouped.set(item.gpPage, []);
+    grouped.get(item.gpPage).push(item);
+  });
+  const sortedPages = [...grouped.keys()].sort((a,b)=>a-b);
+  let html='';
+  sortedPages.forEach(gp => {
+    const arr = grouped.get(gp);
+    const warningCount = countFilteredWarnings(arr);
+    html += `<div class="result-group"><h3>GlotPress Page ${gp} — ${arr.length}文字列 / ${warningCount} Warning</h3>`;
+    arr.forEach(item => {
+      let warnings = selectedRules.size ? item.warnings.filter(w=>selectedRules.has(w.rule)) : item.warnings;
+      html += `<article class="result-card">
+        <div class="result-card__head"><span class="id">#${item.id}</span><span class="page-origin">GlotPress Page ${item.gpPage}</span><span class="spacer"></span><a>Page ${item.gpPage} で開く ↗</a></div>
+        <div class="result-card__body">
+          <div class="field"><label>原文</label><div>${item.original}</div></div>
+          <div class="field"><label>翻訳</label><div>${item.translation}</div></div>
+          <div class="warnings"><label style="color:#646970;font-size:12px">Warning</label>
+            ${warnings.map(w=>`<div class="warning-item"><span class="rule-badge ${w.general?'general':''}">${w.rule}</span><span>${w.label}</span></div>`).join('')}
+          </div>
+        </div>
+      </article>`;
+    });
+    html += '</div>';
+  });
+  if (!visible.length) html = '<div class="empty">選択したルールに該当する Warning はありません。</div>';
+  $('resultList').innerHTML = html;
+
+  const warnCount = countFilteredWarnings(filtered);
+  $('metricWarnings').textContent = warnCount;
+  $('metricStrings').textContent = filtered.length;
+  $('rangeText').textContent = filtered.length ? `${start+1}–${Math.min(start+size, filtered.length)} / ${filtered.length}文字列` : '0文字列';
+  $('resultPageText').textContent = `結果 ${page} / ${pages}ページ`;
+  $('filterMeta').textContent = selectedRules.size ? `${selectedRules.size}ルールで絞り込み中` : 'すべての Warning を表示';
+
+  let phtml='';
+  if (pages>1) {
+    phtml += `<button ${page===1?'disabled':''} data-p="${page-1}">←</button>`;
+    for (let p=1;p<=pages;p++) {
+      if (pages>7 && p>3 && p<pages-1 && Math.abs(p-page)>1) {
+        if (!phtml.endsWith('…')) phtml += '<span style="padding:8px">…</span>';
+        continue;
+      }
+      phtml += `<button class="${p===page?'active':''}" data-p="${p}">${p}</button>`;
+    }
+    phtml += `<button ${page===pages?'disabled':''} data-p="${page+1}">→</button>`;
+  }
+  $('pagination').innerHTML = phtml;
+  document.querySelectorAll('#pagination [data-p]').forEach(b => b.addEventListener('click', e => {
+    if (e.currentTarget.disabled) return;
+    page = Number(e.currentTarget.dataset.p);
+    renderResults();
+    document.querySelector('.warning-tool').scrollIntoView({behavior:'smooth', block:'start'});
+  }));
+}
+
+async function scan() {
+  if (scanned) { page=1; selectedRules.clear(); pendingRules.clear(); renderChips(); }
+  $('scanBtn').disabled = true;
+  $('rescanBtn').disabled = true;
+  $('statusBox').style.display = 'block';
+  $('summary').style.display = 'none';
+  $('filtersArea').style.display = 'none';
+  $('results').style.display = 'none';
+  for (let i=1;i<=12;i++) {
+    $('statusText').textContent = `Scanning... ${i} / 12 pages checked · ${Math.round((i/12)*328)} warnings found`;
+    $('progress').style.width = `${i/12*100}%`;
+    await sleep(110);
+  }
+  scanned = true;
+  $('statusText').textContent = 'Scan complete.';
+  await sleep(180);
+  $('statusBox').style.display = 'none';
+  $('summary').style.display = 'block';
+  $('filtersArea').style.display = 'block';
+  $('results').style.display = 'block';
+  $('scanBtn').disabled = false;
+  $('rescanBtn').disabled = false;
+  $('scanBtn').textContent = 'もう一度確認';
+  renderRuleOptions();
+  renderChips();
+  renderResults();
+}
+
+$('scanBtn').addEventListener('click', scan);
+$('rescanBtn').addEventListener('click', scan);
+$('pageSize').addEventListener('change', ()=>{page=1; renderResults();});
+$('ruleFilterBtn').addEventListener('click', ()=>{
+  pendingRules = new Set(selectedRules);
+  renderRuleOptions($('ruleSearch').value);
+  $('ruleMenu').classList.toggle('open');
+});
+$('ruleSearch').addEventListener('input', e=>renderRuleOptions(e.target.value));
+$('clearRules').addEventListener('click', ()=>{ pendingRules.clear(); renderRuleOptions($('ruleSearch').value); });
+$('applyRules').addEventListener('click', ()=>{
+  selectedRules = new Set(pendingRules);
+  page = 1;
+  $('ruleMenu').classList.remove('open');
+  renderChips();
+  renderResults();
+});
+document.addEventListener('click', e=>{
+  if (!e.target.closest('.rule-filter-wrap')) $('ruleMenu').classList.remove('open');
+});
+</script>
+</body>
+</html>
