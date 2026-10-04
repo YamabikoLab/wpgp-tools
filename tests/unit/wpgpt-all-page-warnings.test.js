@@ -37,22 +37,25 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 		wpgpt_is_japanese_locale: () => japaneseLocale,
 	} );
 
-	const defaultRule = ( setting, styleGuideItem, message ) => () => [ {
+	const defaultRule = ( setting, styleGuideItem, message, matches = [] ) => () => [ {
 		setting,
 		style_guide_item: styleGuideItem,
 		message,
+		matches,
 	} ];
 
 	context.wpgpt_ja_check_punctuation = defaultRule(
 		'ja_punctuation',
 		'1-1 日本語の句読点',
-		'句読点を確認してください'
+		'句読点を確認してください',
+		[ { start: 0, end: 1 } ]
 	);
 	context.wpgpt_ja_check_half_width = () => [];
 	context.wpgpt_ja_check_half_full_spacing = defaultRule(
 		'ja_half_full_spacing',
 		'1-4 半角文字と全角文字の間のスペース',
-		'スペースを確認してください'
+		'スペースを確認してください',
+		[ { start: 1, end: 3 } ]
 	);
 	context.wpgpt_ja_check_parentheses = () => [];
 	context.wpgpt_ja_check_inner_parentheses_spacing = () => [];
@@ -186,6 +189,7 @@ describe( 'Japanese finding collection', () => {
 			[ 'ja_punctuation', 'ja_half_full_spacing' ]
 		);
 		assert.ok( findings.every( ( finding ) => 2 === finding.form ) );
+		assert.deepEqual( normalize( findings[ 1 ].matches ), [ { start: 1, end: 3 } ] );
 	} );
 
 	test( 'does not collect Japanese findings when Japanese checks are disabled', () => {
@@ -198,6 +202,44 @@ describe( 'Japanese finding collection', () => {
 		const api = loadAllPageWarnings( { japaneseLocale: false } );
 
 		assert.deepEqual( normalize( api.collectJapaneseFindings( 'Original', 'Translation', 1 ) ), [] );
+	} );
+} );
+
+describe( 'Japanese Warning highlight ranges', () => {
+	test( 'uses only visible rules and the matching plural form, then merges overlapping ranges', () => {
+		const api = loadAllPageWarnings();
+		const result = {
+			japaneseFindings: [
+				{
+					setting: 'ja_punctuation',
+					form: 1,
+					matches: [ { start: 0, end: 2 } ],
+				},
+				{
+					setting: 'ja_half_full_spacing',
+					form: 1,
+					matches: [ { start: 1, end: 4 }, { start: 8, end: 20 } ],
+				},
+				{
+					setting: 'ja_half_full_spacing',
+					form: 2,
+					matches: [ { start: 4, end: 6 } ],
+				},
+			],
+		};
+
+		assert.deepEqual(
+			normalize( api.highlightRanges( result, 1, new Set(), 10 ) ),
+			[ { start: 0, end: 4 }, { start: 8, end: 10 } ]
+		);
+		assert.deepEqual(
+			normalize( api.highlightRanges( result, 1, new Set( [ 'ja_punctuation' ] ), 10 ) ),
+			[ { start: 0, end: 2 } ]
+		);
+		assert.deepEqual(
+			normalize( api.highlightRanges( result, 2, new Set(), 10 ) ),
+			[ { start: 4, end: 6 } ]
+		);
 	} );
 } );
 
