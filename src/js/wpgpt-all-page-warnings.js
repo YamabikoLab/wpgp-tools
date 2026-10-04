@@ -1,3 +1,5 @@
+/* global wpgpt_settings, wpgpt_is_japanese_locale, wpgpt_run_checks, wpgpt_ja_check_punctuation, wpgpt_ja_check_half_width, wpgpt_ja_check_half_full_spacing, wpgpt_ja_check_parentheses, wpgpt_ja_check_inner_parentheses_spacing, wpgpt_ja_check_period_inside_parentheses, wpgpt_ja_check_sentence_ending_parentheses, wpgpt_ja_check_number_spacing, wpgpt_ja_check_recommended_expressions, wpgpt_ja_check_view_expression, wpgpt_ja_check_not_allowed_expression, wpgpt_ja_check_sorry_prefix, wpgpt_ja_check_middle_dot */
+
 /* YamabikoLab: all-page Warning scan for GlotPress translation lists. */
 
 const WPGPT_ALL_PAGE_WARNING_RULES = [
@@ -151,7 +153,6 @@ function wpgpt_all_page_warnings_paging_url( pageDocument, direction, baseUrl ) 
 async function wpgpt_all_page_warnings_fetch_page( url ) {
 	const response = await fetch( url, {
 		credentials: 'same-origin',
-		headers: new Headers( { 'X-Requested-With': 'XMLHttpRequest' } ),
 	} );
 
 	if ( ! response.ok ) {
@@ -493,7 +494,7 @@ function wpgpt_all_page_warnings_result_card( result ) {
 		wpgpt_all_page_warnings_create_element( 'span', '', 'GlotPress Page ' + result.page )
 	);
 	const open = wpgpt_all_page_warnings_create_element( 'a', 'button', 'Page ' + result.page + ' で開く' );
-	open.href = result.pageUrl + '#'+ result.previewId;
+	open.href = result.pageUrl + '#' + result.previewId;
 	open.target = '_blank';
 	open.rel = 'noopener';
 	head.appendChild( open );
