@@ -1644,34 +1644,6 @@ function wpgpt_init_all_page_warnings() {
 	paging.insertAdjacentElement( 'afterend', ui );
 }
 
-/**
- * 単体テストから仕様上の境界を直接検証するための公開 API。
- *
- * 本番 UI の利用者向け API ではなく、全件確認の判定・変換規則をテストするために公開する。
- */
-globalThis.wpgpt_all_page_warnings_test_api = {
-	hasUnsavedTranslations: wpgpt_all_page_warnings_has_unsaved_translations,
-	normalizeResult: wpgpt_all_page_warnings_normalize_result,
-	filterResults: wpgpt_all_page_warnings_filter_results,
-	searchResults: wpgpt_all_page_warnings_search_results,
-	applyFilters: wpgpt_all_page_warnings_apply_filters,
-	summarize: wpgpt_all_page_warnings_summarize,
-	paginate: wpgpt_all_page_warnings_paginate,
-	ruleOptions: wpgpt_all_page_warnings_rule_options,
-	collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
-	highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
-	normalizeRanges: wpgpt_all_page_warnings_normalize_ranges,
-	slackLiteral: wpgpt_all_page_warnings_slack_literal,
-	slackProblemText: wpgpt_all_page_warnings_slack_problem_text,
-	slackAll: wpgpt_all_page_warnings_slack_all,
-	slackSingle: wpgpt_all_page_warnings_slack_single,
-	copyText: wpgpt_all_page_warnings_copy_text,
-	buildExportUrl: wpgpt_all_page_warnings_build_export_url,
-	buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
-	isPo: wpgpt_all_page_warnings_is_po,
-	parsePo: wpgpt_all_page_warnings_parse_po,
-};
-
 // ブラウザー画面で読み込まれた場合だけ自動初期化し、単体テスト環境では明示呼び出しに任せる。
 if ( 'undefined' !== typeof document && 'undefined' !== typeof window ) {
 	wpgpt_init_all_page_warnings();
