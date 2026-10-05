@@ -330,3 +330,40 @@
 		margin-left: 0;
 	}
 }
+
+
+.wpgpt-all-page-warnings__search {
+	min-width: min(320px, 100%);
+}
+
+.wpgpt-all-page-warnings__copy-status {
+	color: #646970;
+	font-size: 12px;
+}
+
+.wpgpt-all-page-warnings__warning > span:nth-child(2) {
+	flex: 1 1 auto;
+}
+
+.wpgpt-all-page-warnings__warning-copy {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+@media (max-width: 760px) {
+	.wpgpt-all-page-warnings__search {
+		width: 100%;
+	}
+
+	.wpgpt-all-page-warnings__warning {
+		flex-wrap: wrap;
+	}
+
+	.wpgpt-all-page-warnings__warning-copy {
+		width: 100%;
+		margin-left: 0;
+	}
+}
