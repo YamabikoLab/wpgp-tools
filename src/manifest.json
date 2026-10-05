@@ -7,6 +7,7 @@
 		{
 			"resources": [
 				"js/wpgpt-checks.js",
+				"js/wpgpt-all-page-warnings.js",
 				"js/wpgpt-settings.js",
 				"js/wpgpt-functions.js",
 				"js/wpgpt-history.js",
@@ -30,7 +31,8 @@
 				"js/wpgpt-consistency.js"
 			],
 			"css": [
-				"css/wpgpt-style.css"
+				"css/wpgpt-style.css",
+				"css/wpgpt-all-page-warnings.css"
 			]
 		}
 	],

@@ -1,0 +1,1070 @@
+/* global wpgpt_settings, wpgpt_is_japanese_locale, wpgpt_run_checks, wpgpt_ja_check_punctuation, wpgpt_ja_check_half_width, wpgpt_ja_check_half_full_spacing, wpgpt_ja_check_parentheses, wpgpt_ja_check_inner_parentheses_spacing, wpgpt_ja_check_period_inside_parentheses, wpgpt_ja_check_sentence_ending_parentheses, wpgpt_ja_check_number_spacing, wpgpt_ja_check_recommended_expressions, wpgpt_ja_check_view_expression, wpgpt_ja_check_not_allowed_expression, wpgpt_ja_check_sorry_prefix, wpgpt_ja_check_middle_dot */
+
+/* YamabikoLab: Warning scan for the current GlotPress translation result set. */
+
+const WPGPT_ALL_PAGE_WARNING_RULES = [
+	{ setting: 'ja_punctuation', label: '1-1 日本語の句読点' },
+	{ setting: 'ja_half_width', label: '1-2 英数字・記号の半角表記' },
+	{ setting: 'ja_half_full_spacing', label: '1-4 半角文字と全角文字の間のスペース' },
+	{ setting: 'ja_parentheses', label: '1-5 半角丸括弧と前後スペース' },
+	{ setting: 'ja_inner_parentheses_spacing', label: '1-6 丸括弧内側の不要スペース' },
+	{ setting: 'ja_period_inside_parentheses', label: '1-7 括弧内末尾の句点' },
+	{ setting: 'ja_sentence_ending_parentheses', label: '1-8 文末括弧と句点の位置' },
+	{ setting: 'ja_number_spacing', label: '1-9 半角数字前後の不要スペース' },
+	{ setting: 'ja_view_expression', label: '3-2 「View XX」の訳し方' },
+	{ setting: 'ja_not_allowed_expression', label: '3-3 「not allowed to」の権限表現' },
+	{ setting: 'ja_sorry_prefix', label: '3-4 「Sorry, ...」の Sorry を訳さない' },
+	{ setting: 'ja_recommended_expressions', label: '3-6 推奨表記' },
+	{ setting: 'ja_middle_dot', label: '5 中点「・」' },
+];
+
+function wpgpt_create_dirty_tracker() {
+	const baselines = new Map();
+	const currentValues = new Map();
+
+	return {
+		register( key, value ) {
+			if ( ! baselines.has( key ) ) {
+				baselines.set( key, value );
+			}
+			currentValues.set( key, value );
+		},
+		update( key, value ) {
+			if ( ! baselines.has( key ) ) {
+				baselines.set( key, value );
+			}
+			currentValues.set( key, value );
+		},
+		markSaved( key, value ) {
+			baselines.set( key, value );
+			currentValues.set( key, value );
+		},
+		remove( key ) {
+			baselines.delete( key );
+			currentValues.delete( key );
+		},
+		isDirty( key ) {
+			return baselines.has( key ) && currentValues.get( key ) !== baselines.get( key );
+		},
+		hasDirty() {
+			for ( const key of baselines.keys() ) {
+				if ( this.isDirty( key ) ) {
+					return true;
+				}
+			}
+			return false;
+		},
+		dirtyKeys() {
+			return Array.from( baselines.keys() ).filter( ( key ) => this.isDirty( key ) );
+		},
+		baseline( key ) {
+			return baselines.get( key );
+		},
+	};
+}
+
+function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
+	if ( ! selectedRules || 0 === selectedRules.size ) {
+		return results.map( ( result ) => ( {
+			...result,
+			displayWarnings: result.warnings,
+		} ) );
+	}
+
+	return results.reduce( ( filtered, result ) => {
+		const matching = result.japaneseFindings.filter( ( finding ) => selectedRules.has( finding.setting ) );
+		if ( matching.length ) {
+			filtered.push( {
+				...result,
+				displayWarnings: matching.map( ( finding ) => ( {
+					text: finding.style_guide_item + ': ' + finding.message,
+					form: finding.form,
+					setting: finding.setting,
+					styleGuideItem: finding.style_guide_item,
+					matches: finding.matches,
+				} ) ),
+			} );
+		}
+		return filtered;
+	}, [] );
+}
+
+function wpgpt_all_page_warnings_summarize( results ) {
+	return {
+		warnings: results.reduce( ( total, result ) => total + result.displayWarnings.length, 0 ),
+		strings: results.length,
+	};
+}
+
+function wpgpt_all_page_warnings_paginate( results, page, pageSize ) {
+	const totalPages = Math.max( 1, Math.ceil( results.length / pageSize ) );
+	const safePage = Math.min( Math.max( 1, page ), totalPages );
+	const start = ( safePage - 1 ) * pageSize;
+
+	return {
+		page: safePage,
+		totalPages,
+		start,
+		items: results.slice( start, start + pageSize ),
+	};
+}
+
+function wpgpt_all_page_warnings_collect_japanese_findings( singularOriginal, translated, form = 1 ) {
+	if (
+		'enabled' !== wpgpt_settings.ja_checks.state ||
+		! wpgpt_is_japanese_locale()
+	) {
+		return [];
+	}
+
+	const findings = [
+		...wpgpt_ja_check_punctuation( translated ),
+		...wpgpt_ja_check_half_width( translated ),
+		...wpgpt_ja_check_half_full_spacing( translated ),
+		...wpgpt_ja_check_parentheses( translated ),
+		...wpgpt_ja_check_inner_parentheses_spacing( translated ),
+		...wpgpt_ja_check_period_inside_parentheses( translated ),
+		...wpgpt_ja_check_sentence_ending_parentheses( translated ),
+		...wpgpt_ja_check_number_spacing( translated ),
+		...wpgpt_ja_check_recommended_expressions( translated ),
+		...wpgpt_ja_check_view_expression( singularOriginal, translated ),
+		...wpgpt_ja_check_not_allowed_expression( singularOriginal, translated ),
+		...wpgpt_ja_check_sorry_prefix( singularOriginal, translated ),
+		...wpgpt_ja_check_middle_dot( translated ),
+	];
+
+	return findings
+		.filter( ( finding ) => 'warning' === wpgpt_settings[ finding.setting ]?.state )
+		.map( ( finding ) => ( {
+			setting: finding.setting,
+			style_guide_item: finding.style_guide_item,
+			message: finding.message,
+			matches: Array.isArray( finding.matches ) ? finding.matches : [],
+			form,
+		} ) );
+}
+
+function wpgpt_all_page_warnings_build_export_url( pageDocument = document, baseUrl = window.location.href ) {
+	const exportLink = pageDocument.querySelector( 'a#export' );
+	if ( ! exportLink ) {
+		throw new Error( 'GlotPress の Export リンクを取得できませんでした。' );
+	}
+
+	const href = exportLink.getAttribute( 'filters' ) || exportLink.getAttribute( 'href' );
+	if ( ! href ) {
+		throw new Error( 'GlotPress の Export URL を取得できませんでした。' );
+	}
+
+	const url = new URL( href, baseUrl );
+	url.hash = '';
+	url.searchParams.set( 'format', 'po' );
+	return url.href;
+}
+
+function wpgpt_all_page_warnings_build_source_url( exportUrl, original ) {
+	const url = new URL( exportUrl );
+	url.pathname = url.pathname.replace( /\/export-translations\/?$/u, '/' );
+	url.hash = '';
+	url.searchParams.delete( 'format' );
+	url.searchParams.set( 'filters[term]', original );
+	url.searchParams.set( 'filters[term_scope]', 'scope_originals' );
+	return url.href;
+}
+
+function wpgpt_all_page_warnings_is_po( text ) {
+	return /^msgid\s+"/mu.test( text ) && /^msgstr(?:\[\d+\])?\s+"/mu.test( text );
+}
+
+async function wpgpt_all_page_warnings_fetch_po( url ) {
+	const response = await fetch( url, {
+		credentials: 'same-origin',
+	} );
+
+	if ( ! response.ok ) {
+		throw new Error( 'HTTP ' + response.status + ' while loading the PO export.' );
+	}
+
+	const po = await response.text();
+	if ( ! wpgpt_all_page_warnings_is_po( po ) ) {
+		throw new Error( 'The export response was not a PO file.' );
+	}
+
+	return po;
+}
+
+function wpgpt_all_page_warnings_unquote_po( value ) {
+	const trimmed = value.trim();
+	if ( '"' !== trimmed[ 0 ] || '"' !== trimmed[ trimmed.length - 1 ] ) {
+		return '';
+	}
+
+	return trimmed.slice( 1, -1 ).replace(
+		/\\(x[0-9A-Fa-f]{2}|[0-7]{1,3}|[abfnrtv"\\])/gu,
+		( match, escaped ) => {
+			if ( 'x' === escaped[ 0 ] ) {
+				return String.fromCharCode( Number.parseInt( escaped.slice( 1 ), 16 ) );
+			}
+			if ( /^[0-7]+$/u.test( escaped ) ) {
+				return String.fromCharCode( Number.parseInt( escaped, 8 ) );
+			}
+
+			const replacements = {
+				a: '\x07',
+				b: '\b',
+				f: '\f',
+				n: '\n',
+				r: '\r',
+				t: '\t',
+				v: '\v',
+				'"': '"',
+				'\\': '\\',
+			};
+			return replacements[ escaped ] ?? match;
+		}
+	);
+}
+
+function wpgpt_all_page_warnings_parse_po( po ) {
+	const entries = [];
+	let entry = null;
+	let activeField = null;
+
+	const newEntry = () => ( {
+		context: null,
+		msgid: null,
+		msgidPlural: null,
+		translations: [],
+	} );
+
+	const ensureEntry = () => {
+		if ( ! entry ) {
+			entry = newEntry();
+		}
+		return entry;
+	};
+
+	const flush = () => {
+		if ( entry && null !== entry.msgid && '' !== entry.msgid ) {
+			const highestTranslationIndex = entry.translations.length - 1;
+			entry.translations = 0 <= highestTranslationIndex ?
+				Array.from(
+					{ length: highestTranslationIndex + 1 },
+					( unused, index ) => entry.translations[ index ] ?? ''
+				) :
+				[];
+			entries.push( entry );
+		}
+		entry = null;
+		activeField = null;
+	};
+
+	const append = ( text ) => {
+		if ( ! entry || ! activeField ) {
+			return;
+		}
+		if ( 'translation' === activeField.type ) {
+			entry.translations[ activeField.index ] =
+				( entry.translations[ activeField.index ] || '' ) + text;
+			return;
+		}
+		entry[ activeField.type ] = ( entry[ activeField.type ] || '' ) + text;
+	};
+
+	po.replace( /\r\n?/gu, '\n' ).split( '\n' ).forEach( ( line ) => {
+		if ( '' === line.trim() ) {
+			flush();
+			return;
+		}
+		if ( line.startsWith( '#' ) ) {
+			return;
+		}
+
+		let match = line.match( /^msgctxt\s+(".*")\s*$/u );
+		if ( match ) {
+			if ( entry?.msgid !== null ) {
+				flush();
+			}
+			ensureEntry().context = wpgpt_all_page_warnings_unquote_po( match[ 1 ] );
+			activeField = { type: 'context' };
+			return;
+		}
+
+		match = line.match( /^msgid\s+(".*")\s*$/u );
+		if ( match ) {
+			if ( entry?.msgid !== null ) {
+				flush();
+			}
+			ensureEntry().msgid = wpgpt_all_page_warnings_unquote_po( match[ 1 ] );
+			activeField = { type: 'msgid' };
+			return;
+		}
+
+		match = line.match( /^msgid_plural\s+(".*")\s*$/u );
+		if ( match ) {
+			ensureEntry().msgidPlural = wpgpt_all_page_warnings_unquote_po( match[ 1 ] );
+			activeField = { type: 'msgidPlural' };
+			return;
+		}
+
+		match = line.match( /^msgstr(?:\[(\d+)\])?\s+(".*")\s*$/u );
+		if ( match ) {
+			const index = undefined === match[ 1 ] ? 0 : Number.parseInt( match[ 1 ], 10 );
+			ensureEntry().translations[ index ] = wpgpt_all_page_warnings_unquote_po( match[ 2 ] );
+			activeField = { type: 'translation', index };
+			return;
+		}
+
+		match = line.match( /^(".*")\s*$/u );
+		if ( match ) {
+			append( wpgpt_all_page_warnings_unquote_po( match[ 1 ] ) );
+		}
+	} );
+
+	flush();
+	return entries;
+}
+
+function wpgpt_all_page_warnings_analyze_entry( entry, exportUrl ) {
+	if ( ! entry.translations.length || ! entry.translations.some( ( translated ) => '' !== translated ) ) {
+		return null;
+	}
+
+	const originalForms = [ entry.msgid ];
+	if ( null !== entry.msgidPlural ) {
+		originalForms.push( entry.msgidPlural );
+	}
+
+	let originalFormIndex = 0;
+	if ( 2 === originalForms.length && 1 === entry.translations.length ) {
+		originalFormIndex = 1;
+	}
+
+	const warnings = [];
+	const japaneseFindings = [];
+	const singularOriginal = originalForms[ 0 ];
+
+	entry.translations.forEach( ( translated, translatedIndex ) => {
+		const original = originalForms[ originalFormIndex ];
+		const checks = wpgpt_run_checks( original, translated, false, singularOriginal );
+		checks.warning.forEach( ( warning ) => {
+			warnings.push( {
+				text: warning.textContent,
+				form: translatedIndex + 1,
+				setting: null,
+				styleGuideItem: null,
+			} );
+		} );
+		japaneseFindings.push(
+			...wpgpt_all_page_warnings_collect_japanese_findings(
+				singularOriginal,
+				translated,
+				translatedIndex + 1
+			)
+		);
+
+		if ( 2 === originalForms.length ) {
+			originalFormIndex = 1;
+		}
+	} );
+
+	if ( ! warnings.length ) {
+		return {
+			result: null,
+		};
+	}
+
+	return {
+		result: {
+			context: entry.context,
+			sourceUrl: wpgpt_all_page_warnings_build_source_url( exportUrl, singularOriginal ),
+			original: originalForms.join( '\n' ),
+			translations: entry.translations,
+			warnings,
+			japaneseFindings,
+		},
+	};
+}
+
+function wpgpt_all_page_warnings_analyze_entries( entries, exportUrl ) {
+	const results = [];
+	let checkedStrings = 0;
+
+	entries.forEach( ( entry ) => {
+		const analyzed = wpgpt_all_page_warnings_analyze_entry( entry, exportUrl );
+		if ( ! analyzed ) {
+			return;
+		}
+		checkedStrings++;
+		if ( analyzed.result ) {
+			results.push( analyzed.result );
+		}
+	} );
+
+	return {
+		results,
+		checkedStrings,
+	};
+}
+
+function wpgpt_all_page_warnings_create_element( tagName, className, text ) {
+	const element = document.createElement( tagName );
+	if ( className ) {
+		element.className = className;
+	}
+	if ( undefined !== text ) {
+		element.textContent = text;
+	}
+	return element;
+}
+
+function wpgpt_all_page_warnings_highlight_ranges( result, form, selectedRules, textLength ) {
+	const ranges = result.japaneseFindings
+		.filter( ( finding ) => finding.form === form )
+		.filter( ( finding ) => ! selectedRules?.size || selectedRules.has( finding.setting ) )
+		.flatMap( ( finding ) => Array.isArray( finding.matches ) ? finding.matches : [] )
+		.map( ( match ) => ( {
+			start: Math.max( 0, Math.min( textLength, match.start ) ),
+			end: Math.max( 0, Math.min( textLength, match.end ) ),
+		} ) )
+		.filter( ( match ) => Number.isInteger( match.start ) && Number.isInteger( match.end ) && match.start < match.end )
+		.sort( ( a, b ) => a.start - b.start || a.end - b.end );
+
+	return ranges.reduce( ( merged, range ) => {
+		const previous = merged[ merged.length - 1 ];
+		if ( previous && range.start <= previous.end ) {
+			previous.end = Math.max( previous.end, range.end );
+		} else {
+			merged.push( { ...range } );
+		}
+		return merged;
+	}, [] );
+}
+
+function wpgpt_all_page_warnings_append_highlighted_text( container, text, ranges ) {
+	let cursor = 0;
+
+	ranges.forEach( ( range ) => {
+		if ( cursor < range.start ) {
+			container.appendChild( document.createTextNode( text.slice( cursor, range.start ) ) );
+		}
+		const mark = wpgpt_all_page_warnings_create_element(
+			'mark',
+			'wpgpt-all-page-warnings__highlight',
+			text.slice( range.start, range.end )
+		);
+		container.appendChild( mark );
+		cursor = range.end;
+	} );
+
+	if ( cursor < text.length ) {
+		container.appendChild( document.createTextNode( text.slice( cursor ) ) );
+	}
+}
+
+const wpgptAllPageWarningsState = {
+	results: [],
+	selectedRules: new Set(),
+	page: 1,
+	pageSize: 25,
+	scanning: false,
+	checkedStrings: 0,
+	dirtyTracker: wpgpt_create_dirty_tracker(),
+	pendingSaves: new Map(),
+	ui: {},
+};
+
+function wpgpt_all_page_warnings_original_id( row ) {
+	const match = row?.id?.match( /^(?:editor|preview)-(\d+)(?:-\d+)?$/u );
+	return match ? match[ 1 ] : null;
+}
+
+function wpgpt_all_page_warnings_textarea_key( textarea ) {
+	const editor = textarea.closest( 'tr.editor' );
+	if ( ! editor?.id ) {
+		return null;
+	}
+	const textareas = Array.from( editor.querySelectorAll( '.translation-wrapper div.textareas textarea' ) );
+	const formIndex = textareas.indexOf( textarea );
+	return 0 <= formIndex ? editor.id + '::' + formIndex : null;
+}
+
+function wpgpt_all_page_warnings_register_textareas( root = document ) {
+	root.querySelectorAll( '#translations tbody tr.editor .translation-wrapper div.textareas textarea' ).forEach( ( textarea ) => {
+		const key = wpgpt_all_page_warnings_textarea_key( textarea );
+		if ( key ) {
+			wpgptAllPageWarningsState.dirtyTracker.register( key, textarea.value );
+		}
+	} );
+}
+
+function wpgpt_all_page_warnings_update_textarea( textarea ) {
+	const key = wpgpt_all_page_warnings_textarea_key( textarea );
+	if ( key ) {
+		wpgptAllPageWarningsState.dirtyTracker.update( key, textarea.value );
+	}
+}
+
+function wpgpt_all_page_warnings_capture_save( button, pageDocument = document ) {
+	const editor = button.closest( 'tr.editor' );
+	const originalId = wpgpt_all_page_warnings_original_id( editor );
+	if ( ! editor?.id || ! originalId ) {
+		return;
+	}
+
+	const forms = Array.from(
+		editor.querySelectorAll( '.translation-wrapper div.textareas textarea' ),
+		( textarea, formIndex ) => ( {
+			key: wpgpt_all_page_warnings_textarea_key( textarea ),
+			formIndex,
+			value: textarea.value,
+		} )
+	).filter( ( form ) => form.key );
+	const existingPreviewIds = new Set(
+		Array.from(
+			pageDocument.querySelectorAll( '#translations tbody tr[id^="preview-"]' )
+		)
+			.filter( ( preview ) => originalId === wpgpt_all_page_warnings_original_id( preview ) )
+			.map( ( preview ) => preview.id )
+	);
+
+	wpgptAllPageWarningsState.pendingSaves.set( editor.id, {
+		originalId,
+		forms,
+		existingPreviewIds,
+	} );
+}
+
+function wpgpt_all_page_warnings_reconcile_pending_saves( pageDocument = document ) {
+	const previews = Array.from(
+		pageDocument.querySelectorAll( '#translations tbody tr[id^="preview-"]' )
+	);
+
+	wpgptAllPageWarningsState.pendingSaves.forEach( ( pending, editorId ) => {
+		const savedPreview = previews.find( ( preview ) => {
+			if (
+				pending.originalId !== wpgpt_all_page_warnings_original_id( preview ) ||
+				pending.existingPreviewIds.has( preview.id )
+			) {
+				return false;
+			}
+			const previewValues = Array.from(
+				preview.querySelectorAll( '.translation-text' ),
+				( translation ) => translation.textContent
+			);
+			return (
+				pending.forms.length === previewValues.length &&
+				pending.forms.every( ( form, index ) => form.value === previewValues[ index ] )
+			);
+		} );
+
+		if ( savedPreview ) {
+			const newEditorId = savedPreview.id.replace( /^preview-/u, 'editor-' );
+			pending.forms.forEach( ( form ) => {
+				wpgptAllPageWarningsState.dirtyTracker.remove( form.key );
+				wpgptAllPageWarningsState.dirtyTracker.markSaved(
+					newEditorId + '::' + form.formIndex,
+					form.value
+				);
+			} );
+			wpgptAllPageWarningsState.pendingSaves.delete( editorId );
+		}
+	} );
+}
+
+function wpgpt_all_page_warnings_init_dirty_tracking() {
+	const translations = document.querySelector( '#translations' );
+	if ( ! translations ) {
+		return;
+	}
+
+	wpgpt_all_page_warnings_register_textareas();
+
+	translations.addEventListener( 'input', ( event ) => {
+		if ( 'TEXTAREA' !== event.target.tagName ) {
+			return;
+		}
+		wpgpt_all_page_warnings_update_textarea( event.target );
+	} );
+
+	translations.addEventListener( 'change', ( event ) => {
+		if ( 'TEXTAREA' !== event.target.tagName ) {
+			return;
+		}
+		wpgpt_all_page_warnings_update_textarea( event.target );
+	} );
+
+	translations.addEventListener( 'click', ( event ) => {
+		const save = event.target.closest( '.translation-actions__save, .approve' );
+		if ( save ) {
+			wpgpt_all_page_warnings_capture_save( save );
+		}
+	} );
+
+	const observer = new MutationObserver( () => {
+		wpgpt_all_page_warnings_register_textareas();
+		wpgpt_all_page_warnings_reconcile_pending_saves();
+	} );
+	observer.observe( translations, {
+		childList: true,
+		subtree: true,
+		characterData: true,
+	} );
+}
+
+function wpgpt_all_page_warnings_set_status( text, state = '' ) {
+	const status = wpgptAllPageWarningsState.ui.status;
+	status.className = 'wpgpt-all-page-warnings__status' + ( state ? ' is-' + state : '' );
+	status.textContent = text;
+	status.hidden = false;
+}
+
+function wpgpt_all_page_warnings_set_scanning( scanning ) {
+	wpgptAllPageWarningsState.scanning = scanning;
+	wpgptAllPageWarningsState.ui.scan.disabled = scanning;
+	wpgptAllPageWarningsState.ui.rescan.disabled = scanning;
+}
+
+function wpgpt_all_page_warnings_rule_counts( results ) {
+	const counts = new Map();
+	results.forEach( ( result ) => {
+		result.japaneseFindings.forEach( ( finding ) => {
+			counts.set( finding.setting, ( counts.get( finding.setting ) || 0 ) + 1 );
+		} );
+	} );
+	return counts;
+}
+
+function wpgpt_all_page_warnings_rule_options( results ) {
+	const counts = wpgpt_all_page_warnings_rule_counts( results );
+	return WPGPT_ALL_PAGE_WARNING_RULES
+		.map( ( rule ) => {
+			const count = counts.get( rule.setting ) || 0;
+			return {
+				...rule,
+				count,
+				countLabel: count + '件',
+			};
+		} )
+		.filter( ( rule ) => 0 < rule.count );
+}
+
+function wpgpt_all_page_warnings_render_rule_options() {
+	const container = wpgptAllPageWarningsState.ui.ruleOptions;
+	container.replaceChildren();
+
+	const close = wpgpt_all_page_warnings_create_element(
+		'button',
+		'button wpgpt-all-page-warnings__rule-close',
+		'× 閉じる'
+	);
+	close.type = 'button';
+	close.addEventListener( 'click', () => {
+		container.closest( 'details' ).open = false;
+	} );
+	container.appendChild( close );
+
+	wpgpt_all_page_warnings_rule_options( wpgptAllPageWarningsState.results ).forEach( ( rule ) => {
+		const label = wpgpt_all_page_warnings_create_element( 'label', 'wpgpt-all-page-warnings__rule' );
+		const checkbox = document.createElement( 'input' );
+		checkbox.type = 'checkbox';
+		checkbox.value = rule.setting;
+		checkbox.checked = wpgptAllPageWarningsState.selectedRules.has( rule.setting );
+		checkbox.addEventListener( 'change', () => {
+			if ( checkbox.checked ) {
+				wpgptAllPageWarningsState.selectedRules.add( rule.setting );
+			} else {
+				wpgptAllPageWarningsState.selectedRules.delete( rule.setting );
+			}
+			wpgptAllPageWarningsState.page = 1;
+			wpgpt_all_page_warnings_render();
+		} );
+		label.append(
+			checkbox,
+			wpgpt_all_page_warnings_create_element( 'span', '', rule.label ),
+			wpgpt_all_page_warnings_create_element( 'small', '', rule.countLabel )
+		);
+		container.appendChild( label );
+	} );
+}
+
+function wpgpt_all_page_warnings_render_chips() {
+	const chips = wpgptAllPageWarningsState.ui.chips;
+	chips.replaceChildren();
+
+	WPGPT_ALL_PAGE_WARNING_RULES.forEach( ( rule ) => {
+		if ( ! wpgptAllPageWarningsState.selectedRules.has( rule.setting ) ) {
+			return;
+		}
+		const chip = wpgpt_all_page_warnings_create_element( 'span', 'wpgpt-all-page-warnings__chip' );
+		chip.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', rule.label ) );
+		const remove = wpgpt_all_page_warnings_create_element( 'button', '', '×' );
+		remove.type = 'button';
+		remove.setAttribute( 'aria-label', rule.label + ' の絞り込みを解除' );
+		remove.addEventListener( 'click', () => {
+			wpgptAllPageWarningsState.selectedRules.delete( rule.setting );
+			wpgptAllPageWarningsState.page = 1;
+			wpgpt_all_page_warnings_render_rule_options();
+			wpgpt_all_page_warnings_render();
+		} );
+		chip.appendChild( remove );
+		chips.appendChild( chip );
+	} );
+}
+
+function wpgpt_all_page_warnings_warning_item( warning, multipleForms ) {
+	const item = wpgpt_all_page_warnings_create_element( 'li', 'wpgpt-all-page-warnings__warning' );
+	if ( warning.setting ) {
+		const rule = WPGPT_ALL_PAGE_WARNING_RULES.find( ( candidate ) => candidate.setting === warning.setting );
+		item.appendChild(
+			wpgpt_all_page_warnings_create_element(
+				'span',
+				'wpgpt-all-page-warnings__badge',
+				rule ? rule.label.split( ' ' )[ 0 ] : warning.setting
+			)
+		);
+	}
+	const text = multipleForms ? 'Form #' + warning.form + ': ' + warning.text : warning.text;
+	item.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', text ) );
+	return item;
+}
+
+function wpgpt_all_page_warnings_result_card( result ) {
+	const card = wpgpt_all_page_warnings_create_element( 'article', 'wpgpt-all-page-warnings__card' );
+	const head = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__card-head' );
+	const sourceLabel = result.context ? 'Context: ' + result.context : '翻訳文字列';
+	head.appendChild( wpgpt_all_page_warnings_create_element( 'strong', '', sourceLabel ) );
+	const open = wpgpt_all_page_warnings_create_element( 'a', 'button', 'GlotPressで確認' );
+	open.href = result.sourceUrl;
+	open.target = '_blank';
+	open.rel = 'noopener';
+	head.appendChild( open );
+	card.appendChild( head );
+
+	const body = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__card-body' );
+	const original = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__field' );
+	original.append(
+		wpgpt_all_page_warnings_create_element( 'strong', '', '原文' ),
+		wpgpt_all_page_warnings_create_element( 'div', '', result.original )
+	);
+	const translated = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__field' );
+	const translatedText = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__translation' );
+	result.translations.forEach( ( translation, index ) => {
+		if ( 0 < index ) {
+			translatedText.appendChild( document.createTextNode( '\n' ) );
+		}
+		const ranges = wpgpt_all_page_warnings_highlight_ranges(
+			result,
+			index + 1,
+			wpgptAllPageWarningsState.selectedRules,
+			translation.length
+		);
+		wpgpt_all_page_warnings_append_highlighted_text( translatedText, translation, ranges );
+	} );
+	translated.append(
+		wpgpt_all_page_warnings_create_element( 'strong', '', '訳文' ),
+		translatedText
+	);
+	const warnings = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__warnings' );
+	warnings.appendChild( wpgpt_all_page_warnings_create_element( 'strong', '', 'Warnings' ) );
+	const list = document.createElement( 'ul' );
+	const multipleForms = result.translations.length > 1;
+	result.displayWarnings.forEach( ( warning ) => {
+		list.appendChild( wpgpt_all_page_warnings_warning_item( warning, multipleForms ) );
+	} );
+	warnings.appendChild( list );
+	body.append( original, translated, warnings );
+	card.appendChild( body );
+	return card;
+}
+
+function wpgpt_all_page_warnings_render_pagination( pageInfo, pagination ) {
+	pagination.replaceChildren();
+	if ( pageInfo.totalPages <= 1 ) {
+		return;
+	}
+
+	const addButton = ( label, page, disabled = false, active = false ) => {
+		const button = wpgpt_all_page_warnings_create_element( 'button', active ? 'is-active' : '', label );
+		button.type = 'button';
+		button.disabled = disabled;
+		button.addEventListener( 'click', () => {
+			wpgptAllPageWarningsState.page = page;
+			wpgpt_all_page_warnings_render();
+			wpgptAllPageWarningsState.ui.root.scrollIntoView( { block: 'start' } );
+		} );
+		pagination.appendChild( button );
+	};
+
+	addButton( '←', pageInfo.page - 1, 1 === pageInfo.page );
+	for ( let page = 1; page <= pageInfo.totalPages; page++ ) {
+		const nearCurrent = Math.abs( page - pageInfo.page ) <= 1;
+		const edge = page <= 2 || page > pageInfo.totalPages - 2;
+		if ( ! nearCurrent && ! edge ) {
+			if ( ! pagination.lastElementChild?.classList.contains( 'is-dots' ) ) {
+				pagination.appendChild( wpgpt_all_page_warnings_create_element( 'span', 'is-dots', '…' ) );
+			}
+			continue;
+		}
+		addButton( String( page ), page, false, page === pageInfo.page );
+	}
+	addButton( '→', pageInfo.page + 1, pageInfo.page === pageInfo.totalPages );
+}
+
+function wpgpt_all_page_warnings_render() {
+	const filtered = wpgpt_all_page_warnings_filter_results(
+		wpgptAllPageWarningsState.results,
+		wpgptAllPageWarningsState.selectedRules
+	);
+	const summary = wpgpt_all_page_warnings_summarize( filtered );
+	const pageInfo = wpgpt_all_page_warnings_paginate(
+		filtered,
+		wpgptAllPageWarningsState.page,
+		wpgptAllPageWarningsState.pageSize
+	);
+	wpgptAllPageWarningsState.page = pageInfo.page;
+
+	wpgptAllPageWarningsState.ui.warningCount.textContent = String( summary.warnings );
+	wpgptAllPageWarningsState.ui.stringCount.textContent = String( summary.strings );
+	wpgptAllPageWarningsState.ui.checkedCount.textContent = String( wpgptAllPageWarningsState.checkedStrings );
+	wpgptAllPageWarningsState.ui.results.replaceChildren();
+
+	if ( ! pageInfo.items.length ) {
+		wpgptAllPageWarningsState.ui.results.appendChild(
+			wpgpt_all_page_warnings_create_element(
+				'div',
+				'wpgpt-all-page-warnings__empty',
+				wpgptAllPageWarningsState.results.length ?
+					'選択したルールに一致する Warning はありません。' :
+					'Warning は見つかりませんでした。'
+			)
+		);
+	} else {
+		pageInfo.items.forEach( ( result ) => {
+			wpgptAllPageWarningsState.ui.results.appendChild(
+				wpgpt_all_page_warnings_result_card( result )
+			);
+		} );
+	}
+
+	const first = summary.strings ? pageInfo.start + 1 : 0;
+	const last = Math.min( pageInfo.start + pageInfo.items.length, summary.strings );
+	wpgptAllPageWarningsState.ui.range.textContent =
+		first + '–' + last + ' / ' + summary.strings + '文字列';
+	wpgptAllPageWarningsState.ui.resultPage.textContent =
+		'結果ページ ' + pageInfo.page + ' / ' + pageInfo.totalPages;
+	wpgptAllPageWarningsState.ui.content.hidden = false;
+	wpgpt_all_page_warnings_render_chips();
+	wpgpt_all_page_warnings_render_pagination( pageInfo, wpgptAllPageWarningsState.ui.paginationTop );
+	wpgpt_all_page_warnings_render_pagination( pageInfo, wpgptAllPageWarningsState.ui.paginationBottom );
+}
+
+function wpgpt_all_page_warnings_reset_results() {
+	wpgptAllPageWarningsState.results = [];
+	wpgptAllPageWarningsState.selectedRules.clear();
+	wpgptAllPageWarningsState.page = 1;
+	wpgptAllPageWarningsState.checkedStrings = 0;
+	wpgptAllPageWarningsState.ui.content.hidden = true;
+	wpgptAllPageWarningsState.ui.results.replaceChildren();
+	wpgptAllPageWarningsState.ui.paginationTop.replaceChildren();
+	wpgptAllPageWarningsState.ui.paginationBottom.replaceChildren();
+}
+
+async function wpgpt_all_page_warnings_scan() {
+	if ( wpgptAllPageWarningsState.scanning ) {
+		return;
+	}
+
+	wpgpt_all_page_warnings_register_textareas();
+	if ( wpgptAllPageWarningsState.dirtyTracker.hasDirty() ) {
+		wpgpt_all_page_warnings_set_status(
+			'未保存の編集があります。翻訳を保存してから、もう一度全件確認を実行してください。',
+			'warning'
+		);
+		return;
+	}
+
+	wpgpt_all_page_warnings_reset_results();
+	wpgpt_all_page_warnings_set_scanning( true );
+	wpgpt_all_page_warnings_set_status( '翻訳データを取得しています…' );
+
+	try {
+		const exportUrl = wpgpt_all_page_warnings_build_export_url();
+		const po = await wpgpt_all_page_warnings_fetch_po( exportUrl );
+		const entries = wpgpt_all_page_warnings_parse_po( po );
+		wpgpt_all_page_warnings_set_status( entries.length + '件の翻訳データを確認しています…' );
+
+		const analyzed = wpgpt_all_page_warnings_analyze_entries( entries, exportUrl );
+		wpgptAllPageWarningsState.results = analyzed.results;
+		wpgptAllPageWarningsState.checkedStrings = analyzed.checkedStrings;
+
+		wpgpt_all_page_warnings_set_status(
+			'✓ ' + wpgptAllPageWarningsState.checkedStrings + '件の翻訳文字列を確認しました。',
+			'success'
+		);
+		wpgpt_all_page_warnings_render_rule_options();
+		wpgpt_all_page_warnings_render();
+		wpgptAllPageWarningsState.ui.scan.textContent = 'Scan again';
+	} catch ( error ) {
+		wpgpt_all_page_warnings_set_status(
+			'Scan incomplete. ' + error.message,
+			'error'
+		);
+	} finally {
+		wpgpt_all_page_warnings_set_scanning( false );
+	}
+}
+
+function wpgpt_all_page_warnings_build_ui() {
+	const root = wpgpt_all_page_warnings_create_element( 'section', 'wpgpt-all-page-warnings' );
+	const head = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__head' );
+	const titleWrap = document.createElement( 'div' );
+	titleWrap.append(
+		wpgpt_all_page_warnings_create_element( 'h2', '', '全件の Warning を確認' ),
+		wpgpt_all_page_warnings_create_element(
+			'p',
+			'',
+			'現在の検索・ステータス等を反映した翻訳データを一度だけ取得し、ブラウザー内で Warning を確認します。'
+		)
+	);
+	const scan = wpgpt_all_page_warnings_create_element( 'button', 'button is-primary', 'Scan all warnings' );
+	scan.type = 'button';
+	scan.addEventListener( 'click', wpgpt_all_page_warnings_scan );
+	head.append( titleWrap, scan );
+	root.appendChild( head );
+
+	const status = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__status' );
+	status.hidden = true;
+	root.appendChild( status );
+
+	const content = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__content' );
+	content.hidden = true;
+	const snapshot = wpgpt_all_page_warnings_create_element(
+		'p',
+		'wpgpt-all-page-warnings__snapshot',
+		'この一覧は走査時点の結果です。翻訳を修正した後は「Scan again」を実行してください。'
+	);
+	content.appendChild( snapshot );
+
+	const metrics = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__metrics' );
+	const createMetric = ( label ) => {
+		const metric = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__metric' );
+		const value = wpgpt_all_page_warnings_create_element( 'strong', '', '0' );
+		metric.append( value, wpgpt_all_page_warnings_create_element( 'span', '', label ) );
+		metrics.appendChild( metric );
+		return value;
+	};
+	const warningCount = createMetric( 'Warning' );
+	const stringCount = createMetric( '影響する文字列' );
+	const checkedCount = createMetric( '確認した翻訳文字列' );
+	content.appendChild( metrics );
+
+	const filters = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__filters' );
+	const details = document.createElement( 'details' );
+	const summary = wpgpt_all_page_warnings_create_element( 'summary', 'button', 'ルールで絞り込む' );
+	details.appendChild( summary );
+	const ruleOptions = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__rule-options' );
+	details.appendChild( ruleOptions );
+	const clear = wpgpt_all_page_warnings_create_element( 'button', 'button', 'すべて解除' );
+	clear.type = 'button';
+	clear.addEventListener( 'click', () => {
+		wpgptAllPageWarningsState.selectedRules.clear();
+		wpgptAllPageWarningsState.page = 1;
+		wpgpt_all_page_warnings_render_rule_options();
+		wpgpt_all_page_warnings_render();
+	} );
+	details.appendChild( clear );
+	const chips = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__chips' );
+	filters.append( details, chips );
+	content.appendChild( filters );
+
+	const toolbar = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__toolbar' );
+	const range = wpgpt_all_page_warnings_create_element( 'strong', '', '0–0 / 0文字列' );
+	const pageSize = document.createElement( 'select' );
+	[ 25, 50, 100 ].forEach( ( size ) => {
+		const option = document.createElement( 'option' );
+		option.value = String( size );
+		option.textContent = size + '件ずつ';
+		pageSize.appendChild( option );
+	} );
+	pageSize.addEventListener( 'change', () => {
+		wpgptAllPageWarningsState.pageSize = Number.parseInt( pageSize.value, 10 );
+		wpgptAllPageWarningsState.page = 1;
+		wpgpt_all_page_warnings_render();
+	} );
+	const resultPage = wpgpt_all_page_warnings_create_element( 'span', '', '結果ページ 1 / 1' );
+	const rescan = wpgpt_all_page_warnings_create_element( 'button', 'button', 'Scan again' );
+	rescan.type = 'button';
+	rescan.addEventListener( 'click', wpgpt_all_page_warnings_scan );
+	toolbar.append( range, pageSize, resultPage, rescan );
+	content.appendChild( toolbar );
+
+	const paginationTop = wpgpt_all_page_warnings_create_element(
+		'div',
+		'wpgpt-all-page-warnings__pagination is-top'
+	);
+	const results = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__results' );
+	const paginationBottom = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__pagination' );
+	content.append( paginationTop, results, paginationBottom );
+	root.appendChild( content );
+
+	wpgptAllPageWarningsState.ui = {
+		root,
+		scan,
+		rescan,
+		status,
+		content,
+		warningCount,
+		stringCount,
+		checkedCount,
+		ruleOptions,
+		chips,
+		range,
+		resultPage,
+		results,
+		paginationTop,
+		paginationBottom,
+	};
+
+	return root;
+}
+
+function wpgpt_init_all_page_warnings() {
+	const translations = document.querySelector( '#translations' );
+	if ( ! translations || document.querySelector( '.wpgpt-all-page-warnings' ) ) {
+		return;
+	}
+
+	const paging = document.querySelector( '.paging' );
+	if ( ! paging ) {
+		return;
+	}
+
+	const ui = wpgpt_all_page_warnings_build_ui();
+	paging.insertAdjacentElement( 'afterend', ui );
+	wpgpt_all_page_warnings_init_dirty_tracking();
+}
+
+globalThis.wpgpt_all_page_warnings_test_api = {
+	createDirtyTracker: wpgpt_create_dirty_tracker,
+	textareaKey: wpgpt_all_page_warnings_textarea_key,
+	registerTextareas: wpgpt_all_page_warnings_register_textareas,
+	updateTextarea: wpgpt_all_page_warnings_update_textarea,
+	captureSave: wpgpt_all_page_warnings_capture_save,
+	reconcilePendingSaves: wpgpt_all_page_warnings_reconcile_pending_saves,
+	isDirty: ( key ) => wpgptAllPageWarningsState.dirtyTracker.isDirty( key ),
+	hasDirty: () => wpgptAllPageWarningsState.dirtyTracker.hasDirty(),
+	filterResults: wpgpt_all_page_warnings_filter_results,
+	summarize: wpgpt_all_page_warnings_summarize,
+	paginate: wpgpt_all_page_warnings_paginate,
+	ruleOptions: wpgpt_all_page_warnings_rule_options,
+	collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
+	highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
+	buildExportUrl: wpgpt_all_page_warnings_build_export_url,
+	buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
+	isPo: wpgpt_all_page_warnings_is_po,
+	parsePo: wpgpt_all_page_warnings_parse_po,
+};
+
+if ( 'undefined' !== typeof document && 'undefined' !== typeof window ) {
+	wpgpt_init_all_page_warnings();
+}
