@@ -1,5 +1,5 @@
 /**
- * 全件 Warning 一覧の判定・変換・共有用出力について、公開した単体テスト境界から仕様を検証する。
+ * 全件 Warning 一覧の判定・変換・共有用出力について、製品コードを vm 上で読み込み、必要な内部関数を参照して仕様を検証する。
  *
  * 画面の見た目そのものではなく、絞り込み、検索、正規化、問題位置、Slack 共有用文字列、
  * クリップボード境界など、利用者向け動作を構成する規則の回帰防止をこのファイルが担当する。
@@ -83,7 +83,30 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 		filename: 'src/js/wpgpt-all-page-warnings.js',
 	} );
 
-	return context.wpgpt_all_page_warnings_test_api;
+	return vm.runInContext(
+		`({
+			hasUnsavedTranslations: wpgpt_all_page_warnings_has_unsaved_translations,
+			normalizeResult: wpgpt_all_page_warnings_normalize_result,
+			filterResults: wpgpt_all_page_warnings_filter_results,
+			searchResults: wpgpt_all_page_warnings_search_results,
+			applyFilters: wpgpt_all_page_warnings_apply_filters,
+			summarize: wpgpt_all_page_warnings_summarize,
+			paginate: wpgpt_all_page_warnings_paginate,
+			ruleOptions: wpgpt_all_page_warnings_rule_options,
+			collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
+			highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
+			slackLiteral: wpgpt_all_page_warnings_slack_literal,
+			slackProblemText: wpgpt_all_page_warnings_slack_problem_text,
+			slackAll: wpgpt_all_page_warnings_slack_all,
+			slackSingle: wpgpt_all_page_warnings_slack_single,
+			copyText: wpgpt_all_page_warnings_copy_text,
+			buildExportUrl: wpgpt_all_page_warnings_build_export_url,
+			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
+			isPo: wpgpt_all_page_warnings_is_po,
+			parsePo: wpgpt_all_page_warnings_parse_po,
+		})`,
+		context
+	);
 }
 
 function normalize( value ) {
@@ -610,24 +633,5 @@ describe( 'unsaved translation detection', () => {
 		const api = loadAllPageWarnings();
 
 		assert.equal( api.hasUnsavedTranslations( rootWithTextareas( [] ) ), false );
-	} );
-
-	test( 'does not expose removed dirty tracking APIs', () => {
-		const api = loadAllPageWarnings();
-		const removed = [
-			'createDirtyTracker',
-			'textareaKey',
-			'registerTextareas',
-			'updateTextarea',
-			'captureSave',
-			'reconcilePendingSaves',
-			'isDirty',
-			'hasDirty',
-		];
-
-		removed.forEach( ( name ) => {
-			assert.equal( Object.hasOwn( api, name ), false );
-		} );
-		assert.equal( typeof api.hasUnsavedTranslations, 'function' );
 	} );
 } );
