@@ -132,7 +132,7 @@ function wpgpt_all_page_warnings_search_results( results, searchQuery ) {
  * @param {Object[]} results 全件確認で Warning が見つかった翻訳文字列。
  * @param {Set<string>} selectedRules 選択中の日本語翻訳ルール。
  * @param {string} searchQuery 文字列検索条件。
- * @returns {Object[]} 画面表示・集計・Markdown 出力で共有する結果。
+ * @returns {Object[]} 画面表示・集計・Slack コピー出力で共有する結果。
  */
 function wpgpt_all_page_warnings_apply_filters( results, selectedRules, searchQuery ) {
 	return wpgpt_all_page_warnings_search_results(
@@ -704,20 +704,26 @@ function wpgpt_all_page_warnings_append_highlighted_text( container, text, range
 
 
 /**
- * Markdown 内で利用者由来の文字列を構文として解釈させないコードブロックを作る。
+ * Slack へ貼り付ける利用者由来の文字列を、書式解釈されないコードブロックとして出力する。
  *
  * @param {string} value リテラル表示する文字列。
- * @returns {string} 内容中のバッククォート列とも衝突しないコードブロック。
+ * @returns {string} Slack の複数行コードブロック。
  */
-function wpgpt_all_page_warnings_markdown_literal( value ) {
-	const text = String( value ?? '' );
-	const runs = text.match( /`+/gu ) || [];
-	const longest = runs.reduce( ( length, run ) => Math.max( length, run.length ), 0 );
-	const fence = '`'.repeat( Math.max( 3, longest + 1 ) );
-	return fence + 'text\n' + text + '\n' + fence;
+function wpgpt_all_page_warnings_slack_literal( value ) {
+	return '```\n' + String( value ?? '' ) + '\n```';
 }
 
-function wpgpt_all_page_warnings_problem_text( translation, warning ) {
+/**
+ * Warning の位置情報を使い、Slack で問題箇所だけが太字になる確認用訳文を作成する。
+ *
+ * 正確な訳文は別途コードブロックで出力するため、この文字列は問題箇所を見つけやすくする
+ * レビュー補助表示として扱う。
+ *
+ * @param {string} translation 対象 Warning が属する訳文。
+ * @param {Object} warning 表示対象の Warning。
+ * @returns {string} 問題箇所を Slack の太字記法で囲んだ確認用訳文。
+ */
+function wpgpt_all_page_warnings_slack_problem_text( translation, warning ) {
 	const ranges = wpgpt_all_page_warnings_normalize_ranges(
 		warning.matches,
 		translation.length
@@ -730,55 +736,53 @@ function wpgpt_all_page_warnings_problem_text( translation, warning ) {
 	let output = '';
 	ranges.forEach( ( range ) => {
 		output += translation.slice( cursor, range.start );
-		output += '【' + translation.slice( range.start, range.end ) + '】';
+		output += '*' + translation.slice( range.start, range.end ) + '*';
 		cursor = range.end;
 	} );
 	return output + translation.slice( cursor );
 }
 
-function wpgpt_all_page_warnings_markdown_warning( warning, translation, multipleForms, index = null ) {
+function wpgpt_all_page_warnings_slack_warning( warning, translation, multipleForms, index = null ) {
 	const lines = [];
-	const heading = null === index ? '**Warning**' : '**Warning ' + index + '**';
+	const heading = null === index ? '*Warning*' : '*Warning ' + index + '*';
 	lines.push( heading );
 	if ( multipleForms ) {
-		lines.push( '', 'Form #' + warning.form );
+		lines.push( 'Form #' + warning.form );
 	}
-	lines.push( '', wpgpt_all_page_warnings_markdown_literal( warning.text ) );
+	lines.push( wpgpt_all_page_warnings_slack_literal( warning.text ) );
 
-	const problemText = wpgpt_all_page_warnings_problem_text( translation, warning );
+	const problemText = wpgpt_all_page_warnings_slack_problem_text( translation, warning );
 	if ( problemText ) {
 		lines.push(
 			'',
-			'**Problem location**',
-			'',
-			wpgpt_all_page_warnings_markdown_literal( problemText )
+			'*Problem location*',
+			problemText
 		);
 	}
 	return lines.join( '\n' );
 }
 
-function wpgpt_all_page_warnings_markdown_result( result, warnings = result.displayWarnings ) {
+function wpgpt_all_page_warnings_slack_result( result, warnings = result.displayWarnings ) {
 	const lines = [];
 	if ( result.context ) {
-		lines.push( '**Context**', '', wpgpt_all_page_warnings_markdown_literal( result.context ), '' );
+		lines.push( '*Context*', wpgpt_all_page_warnings_slack_literal( result.context ), '' );
 	}
-	lines.push( '**Original**', '', wpgpt_all_page_warnings_markdown_literal( result.original ), '' );
+	lines.push( '*Original*', wpgpt_all_page_warnings_slack_literal( result.original ), '' );
 
 	const multipleForms = result.translations.length > 1;
 	result.translations.forEach( ( translation, index ) => {
 		lines.push(
-			multipleForms ? '**Translation Form #' + ( index + 1 ) + '**' : '**Translation**',
-			'',
-			wpgpt_all_page_warnings_markdown_literal( translation ),
+			multipleForms ? '*Translation Form #' + ( index + 1 ) + '*' : '*Translation*',
+			wpgpt_all_page_warnings_slack_literal( translation ),
 			''
 		);
 	} );
 
-	lines.push( '**Warnings**', '' );
+	lines.push( '*Warnings*' );
 	warnings.forEach( ( warning, index ) => {
 		const translation = result.translations[ warning.form - 1 ] || '';
 		lines.push(
-			wpgpt_all_page_warnings_markdown_warning(
+			wpgpt_all_page_warnings_slack_warning(
 				warning,
 				translation,
 				multipleForms,
@@ -787,19 +791,18 @@ function wpgpt_all_page_warnings_markdown_result( result, warnings = result.disp
 			''
 		);
 	} );
-	lines.push( '**GlotPress**', '', result.sourceUrl );
+	lines.push( '*GlotPress*', result.sourceUrl );
 	return lines.join( '\n' ).trim();
 }
 
-function wpgpt_all_page_warnings_markdown_all( results, selectedRules, searchQuery ) {
+function wpgpt_all_page_warnings_slack_all( results, selectedRules, searchQuery ) {
 	const summary = wpgpt_all_page_warnings_summarize( results );
 	const selectedLabels = WPGPT_ALL_PAGE_WARNING_RULES
 		.filter( ( rule ) => selectedRules?.has( rule.setting ) )
 		.map( ( rule ) => rule.label.split( ' ' )[ 0 ] );
 
 	const lines = [
-		'## Warning レビュー',
-		'',
+		'*Warning レビュー*',
 		'対象: ' + summary.strings + '文字列 / ' + summary.warnings + ' Warnings',
 	];
 	if ( selectedLabels.length ) {
@@ -808,43 +811,38 @@ function wpgpt_all_page_warnings_markdown_all( results, selectedRules, searchQue
 	if ( String( searchQuery || '' ).trim() ) {
 		lines.push(
 			'検索:',
-			'',
-			wpgpt_all_page_warnings_markdown_literal( String( searchQuery ).trim() )
+			wpgpt_all_page_warnings_slack_literal( String( searchQuery ).trim() )
 		);
 	}
 
 	results.forEach( ( result, index ) => {
 		lines.push(
 			'',
-			'### ' + ( index + 1 ) + '. Review item',
+			'*' + ( index + 1 ) + '. Review item*',
+			wpgpt_all_page_warnings_slack_result( result ),
 			'',
-			wpgpt_all_page_warnings_markdown_result( result ),
-			'',
-			'---'
+			'──────────'
 		);
 	} );
-	return lines.join( '\n' ).replace( /\n---$/u, '' ).trim();
+	return lines.join( '\n' ).replace( /\n──────────$/u, '' ).trim();
 }
 
-function wpgpt_all_page_warnings_markdown_single( result, warning ) {
+function wpgpt_all_page_warnings_slack_single( result, warning ) {
 	const translation = result.translations[ warning.form - 1 ] || '';
 	const lines = [];
 	if ( result.context ) {
-		lines.push( '**Context**', '', wpgpt_all_page_warnings_markdown_literal( result.context ), '' );
+		lines.push( '*Context*', wpgpt_all_page_warnings_slack_literal( result.context ), '' );
 	}
 	lines.push(
-		'### Original',
+		'*Original*',
+		wpgpt_all_page_warnings_slack_literal( result.original ),
 		'',
-		wpgpt_all_page_warnings_markdown_literal( result.original ),
+		'*Translation*',
+		wpgpt_all_page_warnings_slack_literal( translation ),
 		'',
-		'**Translation**',
+		wpgpt_all_page_warnings_slack_warning( warning, translation, false ),
 		'',
-		wpgpt_all_page_warnings_markdown_literal( translation ),
-		'',
-		wpgpt_all_page_warnings_markdown_warning( warning, translation, false ),
-		'',
-		'**GlotPress**',
-		'',
+		'*GlotPress*',
 		result.sourceUrl
 	);
 	return lines.join( '\n' ).trim();
@@ -1063,15 +1061,15 @@ function wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) 
 	item.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', text ) );
 
 	const copyWrap = wpgpt_all_page_warnings_create_element( 'span', 'wpgpt-all-page-warnings__warning-copy' );
-	const copy = wpgpt_all_page_warnings_create_element( 'button', 'button button-small', 'MDコピー' );
+	const copy = wpgpt_all_page_warnings_create_element( 'button', 'button button-small', 'この指摘をコピー' );
 	copy.type = 'button';
-	copy.setAttribute( 'aria-label', 'この指摘を Markdown でコピー' );
+	copy.setAttribute( 'aria-label', 'この指摘を Slack 用にコピー' );
 	const copyStatus = wpgpt_all_page_warnings_create_element( 'small', 'wpgpt-all-page-warnings__copy-status' );
 	copy.addEventListener( 'click', async () => {
 		copyStatus.textContent = '';
 		try {
 			await wpgpt_all_page_warnings_copy_text(
-				wpgpt_all_page_warnings_markdown_single( result, warning )
+				wpgpt_all_page_warnings_slack_single( result, warning )
 			);
 			copyStatus.textContent = '✓ コピーしました';
 		} catch ( error ) {
@@ -1415,7 +1413,7 @@ function wpgpt_all_page_warnings_build_ui() {
 		wpgpt_all_page_warnings_render();
 	} );
 
-	const copyAll = wpgpt_all_page_warnings_create_element( 'button', 'button', 'Markdownをコピー' );
+	const copyAll = wpgpt_all_page_warnings_create_element( 'button', 'button', 'Slack用にコピー' );
 	copyAll.type = 'button';
 	const copyStatus = wpgpt_all_page_warnings_create_element(
 		'span',
@@ -1434,15 +1432,15 @@ function wpgpt_all_page_warnings_build_ui() {
 		}
 		try {
 			await wpgpt_all_page_warnings_copy_text(
-				wpgpt_all_page_warnings_markdown_all(
+				wpgpt_all_page_warnings_slack_all(
 					filtered,
 					wpgptAllPageWarningsState.selectedRules,
 					wpgptAllPageWarningsState.searchQuery
 				)
 			);
-			copyStatus.textContent = '✓ Markdownをコピーしました（' + filtered.length + '文字列）';
+			copyStatus.textContent = '✓ Slack用テキストをコピーしました（' + filtered.length + '文字列）';
 		} catch ( error ) {
-			copyStatus.textContent = 'Markdownをコピーできませんでした';
+			copyStatus.textContent = 'Slack用テキストをコピーできませんでした';
 		}
 	} );
 
@@ -1546,10 +1544,10 @@ globalThis.wpgpt_all_page_warnings_test_api = {
 	collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
 	highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
 	normalizeRanges: wpgpt_all_page_warnings_normalize_ranges,
-	markdownLiteral: wpgpt_all_page_warnings_markdown_literal,
-	problemText: wpgpt_all_page_warnings_problem_text,
-	markdownAll: wpgpt_all_page_warnings_markdown_all,
-	markdownSingle: wpgpt_all_page_warnings_markdown_single,
+	slackLiteral: wpgpt_all_page_warnings_slack_literal,
+	slackProblemText: wpgpt_all_page_warnings_slack_problem_text,
+	slackAll: wpgpt_all_page_warnings_slack_all,
+	slackSingle: wpgpt_all_page_warnings_slack_single,
 	copyText: wpgpt_all_page_warnings_copy_text,
 	buildExportUrl: wpgpt_all_page_warnings_build_export_url,
 	buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
