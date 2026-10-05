@@ -396,73 +396,115 @@ describe( 'unsaved translation tracking', () => {
 		assert.equal( tracker.hasDirty(), false );
 	} );
 
-	test( 'clears dirty state after GlotPress replaces the saved row with a new translation ID', () => {
+	test( 'keeps same-original editors independent and migrates only the saved row after replacement', () => {
 		const api = loadAllPageWarnings();
-		const beforeEditor = {
+
+		const editorA = {
 			id: 'editor-123-456',
 			querySelectorAll() {
-				return [ beforeTextarea ];
+				return [ textareaA ];
 			},
 		};
-		const beforeTextarea = {
-			value: '保存済み',
+		const textareaA = {
+			value: 'A',
 			closest() {
-				return beforeEditor;
+				return editorA;
 			},
 		};
-		const beforeRoot = {
+		const editorB = {
+			id: 'editor-123-789',
 			querySelectorAll() {
-				return [ beforeTextarea ];
+				return [ textareaB ];
+			},
+		};
+		const textareaB = {
+			value: 'B',
+			closest() {
+				return editorB;
+			},
+		};
+		const initialRoot = {
+			querySelectorAll() {
+				return [ textareaA, textareaB ];
 			},
 		};
 
-		api.registerTextareas( beforeRoot );
-		beforeTextarea.value = '保存後';
-		api.updateTextarea( beforeTextarea );
-		assert.equal( api.hasDirty(), true );
+		api.registerTextareas( initialRoot );
 
-		api.captureSave( {
+		assert.equal( api.textareaKey( textareaA ), 'editor-123-456::0' );
+		assert.equal( api.textareaKey( textareaB ), 'editor-123-789::0' );
+		assert.equal( api.hasDirty(), false );
+
+		textareaA.value = 'A2';
+		api.updateTextarea( textareaA );
+
+		assert.equal( api.isDirty( 'editor-123-456::0' ), true );
+		assert.equal( api.isDirty( 'editor-123-789::0' ), false );
+
+		const existingPreviewA = {
+			id: 'preview-123-456',
+			querySelectorAll() {
+				return [ { textContent: 'A' } ];
+			},
+		};
+		const existingPreviewB = {
+			id: 'preview-123-789',
+			querySelectorAll() {
+				return [ { textContent: 'B' } ];
+			},
+		};
+		const beforeSaveDocument = {
+			querySelectorAll() {
+				return [ existingPreviewA, existingPreviewB ];
+			},
+		};
+
+		api.captureSave(
+			{
+				closest() {
+					return editorA;
+				},
+			},
+			beforeSaveDocument
+		);
+
+		const afterEditorA = {
+			id: 'editor-123-999',
+			querySelectorAll() {
+				return [ afterTextareaA ];
+			},
+		};
+		const afterTextareaA = {
+			value: 'A2',
 			closest() {
-				return beforeEditor;
+				return afterEditorA;
+			},
+		};
+		const newPreviewA = {
+			id: 'preview-123-999',
+			querySelectorAll() {
+				return [ { textContent: 'A2' } ];
+			},
+		};
+		const afterSaveDocument = {
+			querySelectorAll() {
+				return [ existingPreviewB, newPreviewA ];
+			},
+		};
+
+		api.registerTextareas( {
+			querySelectorAll() {
+				return [ afterTextareaA, textareaB ];
 			},
 		} );
 
-		const afterEditor = {
-			id: 'editor-123-789',
-			querySelectorAll() {
-				return [ afterTextarea ];
-			},
-		};
-		const afterTextarea = {
-			value: '保存後',
-			closest() {
-				return afterEditor;
-			},
-		};
-		const afterRoot = {
-			querySelectorAll() {
-				return [ afterTextarea ];
-			},
-		};
-		const preview = {
-			id: 'preview-123-789',
-			querySelectorAll() {
-				return [ { textContent: '保存後' } ];
-			},
-		};
-		const pageDocument = {
-			querySelectorAll() {
-				return [ preview ];
-			},
-		};
-
-		assert.equal( api.textareaKey( beforeTextarea ), '123::0' );
-		assert.equal( api.textareaKey( afterTextarea ), '123::0' );
-
-		api.registerTextareas( afterRoot );
 		assert.equal( api.hasDirty(), true );
 
-		api.reconcilePendingSaves( pageDocument );
+		api.reconcilePendingSaves( afterSaveDocument );
+
+		assert.equal( api.isDirty( 'editor-123-456::0' ), false );
+		assert.equal( api.isDirty( 'editor-123-999::0' ), false );
+		assert.equal( api.isDirty( 'editor-123-789::0' ), false );
 		assert.equal( api.hasDirty(), false );
 	} );
 } );
