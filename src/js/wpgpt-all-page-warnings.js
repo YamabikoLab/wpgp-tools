@@ -916,6 +916,7 @@ function wpgpt_all_page_warnings_slack_all( results, selectedRules, searchQuery 
 function wpgpt_all_page_warnings_slack_single( result, warning ) {
 	// 対応フォームが存在しない場合でも Warning 文言と確認先は共有できるよう、訳文は空文字列として扱う。
 	const translation = result.translations[ warning.form - 1 ] || '';
+	const multipleForms = result.translations.length > 1;
 	const lines = [];
 	// 文脈がある場合だけ共有し、同一原文の用途をレビュー時に判別できるようにする。
 	if ( result.context ) {
@@ -925,7 +926,8 @@ function wpgpt_all_page_warnings_slack_single( result, warning ) {
 		'*Original*',
 		wpgpt_all_page_warnings_slack_literal( result.original ),
 		'',
-		'*Translation*',
+		// 複数形の一部だけを共有する場合も、元の訳文フォーム番号を失わない見出しにする。
+		multipleForms ? '*Translation Form #' + warning.form + '*' : '*Translation*',
 		wpgpt_all_page_warnings_slack_literal( translation ),
 		'',
 		wpgpt_all_page_warnings_slack_warning( warning, translation, false ),
@@ -1088,6 +1090,8 @@ function wpgpt_all_page_warnings_render_rule_options() {
 			} else {
 				wpgptAllPageWarningsState.selectedRules.delete( rule.setting );
 			}
+			// 共有対象が変わるため、変更前の結果を示すコピー状態は残さない。
+			wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
 			wpgptAllPageWarningsState.page = 1;
 			wpgpt_all_page_warnings_render();
 		} );
@@ -1122,6 +1126,8 @@ function wpgpt_all_page_warnings_render_chips() {
 		remove.setAttribute( 'aria-label', rule.label + ' の絞り込みを解除' );
 		remove.addEventListener( 'click', () => {
 			wpgptAllPageWarningsState.selectedRules.delete( rule.setting );
+			// 絞り込み解除で共有対象が変わるため、変更前のコピー状態を消す。
+			wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
 			wpgptAllPageWarningsState.page = 1;
 			wpgpt_all_page_warnings_render_rule_options();
 			wpgpt_all_page_warnings_render();
@@ -1501,6 +1507,8 @@ function wpgpt_all_page_warnings_build_ui() {
 	clear.type = 'button';
 	clear.addEventListener( 'click', () => {
 		wpgptAllPageWarningsState.selectedRules.clear();
+		// 共有対象が全ルールへ戻るため、変更前のコピー状態を消す。
+		wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
 		wpgptAllPageWarningsState.page = 1;
 		wpgpt_all_page_warnings_render_rule_options();
 		wpgpt_all_page_warnings_render();
@@ -1513,6 +1521,8 @@ function wpgpt_all_page_warnings_build_ui() {
 	search.setAttribute( 'aria-label', '原文・訳文・Contextを検索' );
 	search.addEventListener( 'input', () => {
 		wpgptAllPageWarningsState.searchQuery = search.value;
+		// 検索条件で共有対象が変わるため、変更前の件数を示すコピー状態を残さない。
+		wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
 		wpgptAllPageWarningsState.page = 1;
 		wpgpt_all_page_warnings_render();
 	} );
