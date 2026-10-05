@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "WPGP Tools for Japanese (YamabikoLab)",
-	"version": "2.1.2",
+	"version": "2.2.0",
 	"description": "YamabikoLab fork of WPGP Tools with checks for Japanese WordPress translations.",
 	"web_accessible_resources": [
 		{

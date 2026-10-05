@@ -1,3 +1,14 @@
+# 2.2.0
+05.10.2026
+
+- Add an all-page Warning scan using the current GlotPress PO export
+- Add Japanese rule filtering and Warning highlighting
+- Add pagination for affected translation strings
+- Add text search across original, translation, and context
+- Add Slack-friendly copy for individual and filtered Warning results
+- Improve unsaved translation detection
+- Add automated tests for all-page Warning scanning and related behavior
+
 # 2.1.2
 03.10.2026
 - Deprecate Non Translatable feature
