@@ -1,3 +1,10 @@
+/*
+ * 全件 Warning 一覧の表示構造と操作状態に対応する見た目を定義する。
+ *
+ * 結果一覧、絞り込み、検索、コピー操作、ページ移動、問題箇所の強調表示について、
+ * GlotPress 既存画面の可読性を損なわず利用できる表示責務をこのファイルが所有する。
+ */
+
 .wpgpt-all-page-warnings {
 	margin: 18px 0;
 	border: 1px solid #c3c4c7;
@@ -327,6 +334,43 @@
 
 	.wpgpt-all-page-warnings__toolbar .button:last-child,
 	.wpgpt-all-page-warnings__card-head .button {
+		margin-left: 0;
+	}
+}
+
+
+.wpgpt-all-page-warnings__search {
+	min-width: min(320px, 100%);
+}
+
+.wpgpt-all-page-warnings__copy-status {
+	color: #646970;
+	font-size: 12px;
+}
+
+.wpgpt-all-page-warnings__warning > span:nth-child(2) {
+	flex: 1 1 auto;
+}
+
+.wpgpt-all-page-warnings__warning-copy {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+@media (max-width: 760px) {
+	.wpgpt-all-page-warnings__search {
+		width: 100%;
+	}
+
+	.wpgpt-all-page-warnings__warning {
+		flex-wrap: wrap;
+	}
+
+	.wpgpt-all-page-warnings__warning-copy {
+		width: 100%;
 		margin-left: 0;
 	}
 }
