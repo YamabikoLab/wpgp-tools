@@ -294,7 +294,7 @@ describe( 'PO export scanning', () => {
 			[
 				'msgid ""',
 				'msgstr ""',
-				'"Project-Id-Version: Example\\\\n"',
+				'"Project-Id-Version: Example\\n"',
 				'',
 				'msgctxt "button"',
 				'msgid ""',
@@ -307,9 +307,9 @@ describe( 'PO export scanning', () => {
 				'msgstr[0] "1個のファイル"',
 				'msgstr[1] "%d個のファイル"',
 				'',
-				'msgid "Line\\\\nbreak"',
-				'msgstr "改行\\\\nあり"',
-			].join( '\\n' )
+				'msgid "Line\\nbreak"',
+				'msgstr "改行\\nあり"',
+			].join( '\n' )
 		) );
 
 		assert.equal( entries.length, 3 );
@@ -327,9 +327,9 @@ describe( 'PO export scanning', () => {
 		} );
 		assert.deepEqual( entries[ 2 ], {
 			context: null,
-			msgid: 'Line\\nbreak',
+			msgid: 'Line\nbreak',
 			msgidPlural: null,
-			translations: [ '改行\\nあり' ],
+			translations: [ '改行\nあり' ],
 		} );
 	} );
 
@@ -337,7 +337,7 @@ describe( 'PO export scanning', () => {
 		const api = loadAllPageWarnings();
 
 		assert.equal( api.isPo( '<!doctype html><title>Login</title>' ), false );
-		assert.equal( api.isPo( 'msgid "Hello"\\nmsgstr "こんにちは"' ), true );
+		assert.equal( api.isPo( 'msgid "Hello"\nmsgstr "こんにちは"' ), true );
 	} );
 } );
 
