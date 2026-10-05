@@ -9,12 +9,6 @@
 /* global wpgpt_settings, wpgpt_is_japanese_locale, wpgpt_run_checks, wpgpt_ja_check_punctuation, wpgpt_ja_check_half_width, wpgpt_ja_check_half_full_spacing, wpgpt_ja_check_parentheses, wpgpt_ja_check_inner_parentheses_spacing, wpgpt_ja_check_period_inside_parentheses, wpgpt_ja_check_sentence_ending_parentheses, wpgpt_ja_check_number_spacing, wpgpt_ja_check_recommended_expressions, wpgpt_ja_check_view_expression, wpgpt_ja_check_not_allowed_expression, wpgpt_ja_check_sorry_prefix, wpgpt_ja_check_middle_dot */
 
 /**
- * 全件確認結果で絞り込み対象として扱う日本語翻訳ルール。
- *
- * ここに含まれるルールだけを利用者向けの絞り込み候補として表示し、
- * 実際に Warning が存在しないルールは候補から除外する。
- */
-/**
  * 日本語チェックが基準とする WordPress 日本語翻訳スタイルガイドの情報。
  *
  * 翻訳スタイルガイドの更新へ自動追従させず、日本語チェック仕様を追従した時点で
@@ -23,6 +17,12 @@
 const WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_URL = 'https://ja.wordpress.org/team/handbook/translation/translation-style-guide/';
 const WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_UPDATED_AT = '2026年8月28日';
 
+/**
+ * 全件確認結果で絞り込み対象として扱う日本語翻訳ルール。
+ *
+ * ここに含まれるルールだけを利用者向けの絞り込み候補として表示し、
+ * 実際に Warning が存在しないルールは候補から除外する。
+ */
 const WPGPT_ALL_PAGE_WARNING_RULES = [
 	{ setting: 'ja_punctuation', label: '1-1 日本語の句読点' },
 	{ setting: 'ja_half_width', label: '1-2 英数字・記号の半角表記' },
@@ -1197,7 +1197,7 @@ function wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) 
 }
 
 /**
- * 1つの翻訳文字列について、原文・訳文・Warning・GlotPress 確認導線をまとめた結果カードを作成する。
+ * 1つの翻訳文字列について、原文・訳文・Warning・関連する確認導線をまとめた結果カードを作成する。
  *
  * @param {Object} result 表示対象の全件確認結果。
  * @returns {HTMLElement} 結果一覧へ追加するカード。
