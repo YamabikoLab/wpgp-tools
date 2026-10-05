@@ -42,36 +42,97 @@ const WPGPT_ALL_PAGE_WARNING_RULES = [
  * @param {Set<string>} selectedRules 利用者が絞り込み対象として選択したルール識別子。
  * @returns {Object[]} 一覧表示に使用する Warning を付与した翻訳文字列。
  */
+function wpgpt_all_page_warnings_normalize_result( result ) {
+	const unusedFindings = result.japaneseFindings.map( ( finding ) => ( {
+		...finding,
+		used: false,
+	} ) );
+
+	const displayWarnings = result.warnings.map( ( warning ) => {
+		const finding = unusedFindings.find( ( candidate ) =>
+			! candidate.used &&
+			candidate.form === warning.form &&
+			candidate.style_guide_item + ': ' + candidate.message === warning.text
+		);
+		if ( ! finding ) {
+			return {
+				...warning,
+				matches: Array.isArray( warning.matches ) ? warning.matches : [],
+			};
+		}
+
+		finding.used = true;
+		return {
+			...warning,
+			setting: finding.setting,
+			styleGuideItem: finding.style_guide_item,
+			matches: Array.isArray( finding.matches ) ? finding.matches : [],
+		};
+	} );
+
+	return {
+		...result,
+		displayWarnings,
+	};
+}
+
 function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
-	// 絞り込みルールが未指定なら、走査で得たすべての Warning を表示対象とする。
+	const normalized = results.map( wpgpt_all_page_warnings_normalize_result );
+
 	if ( ! selectedRules || 0 === selectedRules.size ) {
-		// 各翻訳文字列について、元の Warning 一覧をそのまま表示用データとして引き継ぐ。
-		return results.map( ( result ) => ( {
-			...result,
-			displayWarnings: result.warnings,
-		} ) );
+		return normalized;
 	}
 
-	// 選択ルールに該当する指摘を持つ翻訳文字列だけで表示結果を組み立てる。
-	return results.reduce( ( filtered, result ) => {
-		// 1文字列に複数ルールの指摘があり得るため、選択中ルールに一致する指摘だけを抽出する。
-		const matching = result.japaneseFindings.filter( ( finding ) => selectedRules.has( finding.setting ) );
-		// 選択ルールに一致する指摘がない文字列は、絞り込み後の一覧へ表示しない。
+	return normalized.reduce( ( filtered, result ) => {
+		const matching = result.displayWarnings.filter(
+			( warning ) => warning.setting && selectedRules.has( warning.setting )
+		);
 		if ( matching.length ) {
 			filtered.push( {
 				...result,
-				// 一致した各指摘を、結果一覧が共通に扱う Warning 表示形式へ揃える。
-				displayWarnings: matching.map( ( finding ) => ( {
-					text: finding.style_guide_item + ': ' + finding.message,
-					form: finding.form,
-					setting: finding.setting,
-					styleGuideItem: finding.style_guide_item,
-					matches: finding.matches,
-				} ) ),
+				displayWarnings: matching,
 			} );
 		}
 		return filtered;
 	}, [] );
+}
+
+/**
+ * ルール絞り込み後の結果から、原文・訳文・Context に検索文字列を含む項目だけを残す。
+ *
+ * @param {Object[]} results ルール絞り込み済みの表示対象結果。
+ * @param {string} searchQuery 利用者が入力した検索文字列。
+ * @returns {Object[]} 文字列検索を反映した表示対象結果。
+ */
+function wpgpt_all_page_warnings_search_results( results, searchQuery ) {
+	const query = String( searchQuery || '' ).trim().toLocaleLowerCase();
+	if ( ! query ) {
+		return results;
+	}
+
+	return results.filter( ( result ) => {
+		const searchable = [
+			result.original,
+			result.context || '',
+			...( result.translations || [] ),
+		];
+		return searchable.some( ( value ) => String( value || '' ).toLocaleLowerCase().includes( query ) );
+	} );
+}
+
+/**
+ * 現在の全絞り込み条件を同じ結果集合へ順番に適用する。
+ *
+ * @param {Object[]} results 全件確認で Warning が見つかった翻訳文字列。
+ * @param {Set<string>} selectedRules 選択中の日本語翻訳ルール。
+ * @param {string} searchQuery 文字列検索条件。
+ * @returns {Object[]} 画面表示・集計・Markdown 出力で共有する結果。
+ */
+function wpgpt_all_page_warnings_apply_filters( results, selectedRules, searchQuery ) {
+	return wpgpt_all_page_warnings_search_results(
+		wpgpt_all_page_warnings_filter_results( results, selectedRules ),
+		searchQuery
+	);
 }
 
 /**
@@ -572,25 +633,15 @@ function wpgpt_all_page_warnings_create_element( tagName, className, text ) {
  * @param {number} textLength 対象訳文の文字数。
  * @returns {Object[]} 重複を統合した強調表示範囲。
  */
-function wpgpt_all_page_warnings_highlight_ranges( result, form, selectedRules, textLength ) {
-	const ranges = result.japaneseFindings
-		// 複数形では、現在表示している訳文フォームに属する指摘だけを対象にする。
-		.filter( ( finding ) => finding.form === form )
-		// ルール絞り込み中は、画面上で表示しているルールの問題箇所だけを強調する。
-		.filter( ( finding ) => ! selectedRules?.size || selectedRules.has( finding.setting ) )
-		// 各指摘が持つ問題位置を集約し、位置情報がない指摘は強調対象にしない。
-		.flatMap( ( finding ) => Array.isArray( finding.matches ) ? finding.matches : [] )
-		// 指摘位置が訳文範囲外でも、表示対象の文字列境界を越えないよう補正する。
+function wpgpt_all_page_warnings_normalize_ranges( matches, textLength ) {
+	const ranges = ( Array.isArray( matches ) ? matches : [] )
 		.map( ( match ) => ( {
 			start: Math.max( 0, Math.min( textLength, match.start ) ),
 			end: Math.max( 0, Math.min( textLength, match.end ) ),
 		} ) )
-		// 有効な整数範囲として成立する問題位置だけを強調対象として残す。
 		.filter( ( match ) => Number.isInteger( match.start ) && Number.isInteger( match.end ) && match.start < match.end )
-		// 訳文の先頭から順に処理できるよう位置順に並べる。
 		.sort( ( a, b ) => a.start - b.start || a.end - b.end );
 
-	// 重なり合う指摘範囲を統合し、同じ文字列へ重複した強調要素を生成しない。
 	return ranges.reduce( ( merged, range ) => {
 		const previous = merged[ merged.length - 1 ];
 		// 直前の範囲と重なる、または連続する指摘は一つの強調範囲として扱う。
@@ -601,6 +652,16 @@ function wpgpt_all_page_warnings_highlight_ranges( result, form, selectedRules, 
 		}
 		return merged;
 	}, [] );
+}
+
+function wpgpt_all_page_warnings_highlight_ranges( result, form, selectedRules, textLength ) {
+	const warnings = result.displayWarnings || result.japaneseFindings || [];
+	const matches = warnings
+		.filter( ( warning ) => warning.form === form )
+		.filter( ( warning ) => ! selectedRules?.size || ! warning.setting || selectedRules.has( warning.setting ) )
+		.flatMap( ( warning ) => Array.isArray( warning.matches ) ? warning.matches : [] );
+
+	return wpgpt_all_page_warnings_normalize_ranges( matches, textLength );
 }
 
 /**
@@ -635,6 +696,157 @@ function wpgpt_all_page_warnings_append_highlighted_text( container, text, range
 	}
 }
 
+
+/**
+ * Markdown 内で利用者由来の文字列を構文として解釈させないコードブロックを作る。
+ *
+ * @param {string} value リテラル表示する文字列。
+ * @returns {string} 内容中のバッククォート列とも衝突しないコードブロック。
+ */
+function wpgpt_all_page_warnings_markdown_literal( value ) {
+	const text = String( value ?? '' );
+	const runs = text.match( /`+/gu ) || [];
+	const longest = runs.reduce( ( length, run ) => Math.max( length, run.length ), 0 );
+	const fence = '`'.repeat( Math.max( 3, longest + 1 ) );
+	return fence + 'text\n' + text + '\n' + fence;
+}
+
+function wpgpt_all_page_warnings_problem_text( translation, warning ) {
+	const ranges = wpgpt_all_page_warnings_normalize_ranges(
+		warning.matches,
+		translation.length
+	);
+	if ( ! ranges.length ) {
+		return '';
+	}
+
+	let cursor = 0;
+	let output = '';
+	ranges.forEach( ( range ) => {
+		output += translation.slice( cursor, range.start );
+		output += '【' + translation.slice( range.start, range.end ) + '】';
+		cursor = range.end;
+	} );
+	return output + translation.slice( cursor );
+}
+
+function wpgpt_all_page_warnings_markdown_warning( warning, translation, multipleForms, index = null ) {
+	const lines = [];
+	const heading = null === index ? '**Warning**' : '**Warning ' + index + '**';
+	lines.push( heading );
+	if ( multipleForms ) {
+		lines.push( '', 'Form #' + warning.form );
+	}
+	lines.push( '', wpgpt_all_page_warnings_markdown_literal( warning.text ) );
+
+	const problemText = wpgpt_all_page_warnings_problem_text( translation, warning );
+	if ( problemText ) {
+		lines.push(
+			'',
+			'**Problem location**',
+			'',
+			wpgpt_all_page_warnings_markdown_literal( problemText )
+		);
+	}
+	return lines.join( '\n' );
+}
+
+function wpgpt_all_page_warnings_markdown_result( result, warnings = result.displayWarnings ) {
+	const lines = [];
+	if ( result.context ) {
+		lines.push( '**Context**', '', wpgpt_all_page_warnings_markdown_literal( result.context ), '' );
+	}
+	lines.push( '**Original**', '', wpgpt_all_page_warnings_markdown_literal( result.original ), '' );
+
+	const multipleForms = result.translations.length > 1;
+	result.translations.forEach( ( translation, index ) => {
+		lines.push(
+			multipleForms ? '**Translation Form #' + ( index + 1 ) + '**' : '**Translation**',
+			'',
+			wpgpt_all_page_warnings_markdown_literal( translation ),
+			''
+		);
+	} );
+
+	lines.push( '**Warnings**', '' );
+	warnings.forEach( ( warning, index ) => {
+		const translation = result.translations[ warning.form - 1 ] || '';
+		lines.push(
+			wpgpt_all_page_warnings_markdown_warning(
+				warning,
+				translation,
+				multipleForms,
+				index + 1
+			),
+			''
+		);
+	} );
+	lines.push( '**GlotPress**', '', result.sourceUrl );
+	return lines.join( '\n' ).trim();
+}
+
+function wpgpt_all_page_warnings_markdown_all( results, selectedRules, searchQuery ) {
+	const summary = wpgpt_all_page_warnings_summarize( results );
+	const selectedLabels = WPGPT_ALL_PAGE_WARNING_RULES
+		.filter( ( rule ) => selectedRules?.has( rule.setting ) )
+		.map( ( rule ) => rule.label.split( ' ' )[ 0 ] );
+
+	const lines = [
+		'## Warning レビュー',
+		'',
+		'対象: ' + summary.strings + '文字列 / ' + summary.warnings + ' Warnings',
+	];
+	if ( selectedLabels.length ) {
+		lines.push( 'ルール: ' + selectedLabels.join( ', ' ) );
+	}
+	if ( String( searchQuery || '' ).trim() ) {
+		lines.push( '検索: ' + String( searchQuery ).trim() );
+	}
+
+	results.forEach( ( result, index ) => {
+		lines.push(
+			'',
+			'### ' + ( index + 1 ) + '. Review item',
+			'',
+			wpgpt_all_page_warnings_markdown_result( result ),
+			'',
+			'---'
+		);
+	} );
+	return lines.join( '\n' ).replace( /\n---$/u, '' ).trim();
+}
+
+function wpgpt_all_page_warnings_markdown_single( result, warning ) {
+	const translation = result.translations[ warning.form - 1 ] || '';
+	const lines = [];
+	if ( result.context ) {
+		lines.push( '**Context**', '', wpgpt_all_page_warnings_markdown_literal( result.context ), '' );
+	}
+	lines.push(
+		'### Original',
+		'',
+		wpgpt_all_page_warnings_markdown_literal( result.original ),
+		'',
+		'**Translation**',
+		'',
+		wpgpt_all_page_warnings_markdown_literal( translation ),
+		'',
+		wpgpt_all_page_warnings_markdown_warning( warning, translation, false ),
+		'',
+		'**GlotPress**',
+		'',
+		result.sourceUrl
+	);
+	return lines.join( '\n' ).trim();
+}
+
+async function wpgpt_all_page_warnings_copy_text( text, clipboard = navigator.clipboard ) {
+	if ( ! clipboard || 'function' !== typeof clipboard.writeText ) {
+		throw new Error( 'Clipboard API is not available.' );
+	}
+	await clipboard.writeText( text );
+}
+
 /**
  * 全件確認 UI の1画面内状態。
  *
@@ -644,6 +856,7 @@ function wpgpt_all_page_warnings_append_highlighted_text( container, text, range
 const wpgptAllPageWarningsState = {
 	results: [],
 	selectedRules: new Set(),
+	searchQuery: '',
 	page: 1,
 	pageSize: 25,
 	scanning: false,
@@ -820,7 +1033,7 @@ function wpgpt_all_page_warnings_render_chips() {
  * @param {boolean} multipleForms 複数の訳文フォームを区別して表示する必要があるかどうか。
  * @returns {HTMLElement} Warning の一覧項目。
  */
-function wpgpt_all_page_warnings_warning_item( warning, multipleForms ) {
+function wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) {
 	const item = wpgpt_all_page_warnings_create_element( 'li', 'wpgpt-all-page-warnings__warning' );
 	// 日本語ルール由来の Warning だけにルール識別表示を付け、既存の一般 Warning と区別する。
 	if ( warning.setting ) {
@@ -838,6 +1051,25 @@ function wpgpt_all_page_warnings_warning_item( warning, multipleForms ) {
 	// 複数フォームがある場合だけフォーム番号を付け、どの訳文への指摘かを明確にする。
 	const text = multipleForms ? 'Form #' + warning.form + ': ' + warning.text : warning.text;
 	item.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', text ) );
+
+	const copyWrap = wpgpt_all_page_warnings_create_element( 'span', 'wpgpt-all-page-warnings__warning-copy' );
+	const copy = wpgpt_all_page_warnings_create_element( 'button', 'button button-small', 'MDコピー' );
+	copy.type = 'button';
+	copy.setAttribute( 'aria-label', 'この指摘を Markdown でコピー' );
+	const copyStatus = wpgpt_all_page_warnings_create_element( 'small', 'wpgpt-all-page-warnings__copy-status' );
+	copy.addEventListener( 'click', async () => {
+		copyStatus.textContent = '';
+		try {
+			await wpgpt_all_page_warnings_copy_text(
+				wpgpt_all_page_warnings_markdown_single( result, warning )
+			);
+			copyStatus.textContent = '✓ コピーしました';
+		} catch ( error ) {
+			copyStatus.textContent = 'コピーできませんでした';
+		}
+	} );
+	copyWrap.append( copy, copyStatus );
+	item.appendChild( copyWrap );
 	return item;
 }
 
@@ -893,7 +1125,7 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	const multipleForms = result.translations.length > 1;
 	// 現在の絞り込み条件で表示対象となった Warning をすべてカードへ並べる。
 	result.displayWarnings.forEach( ( warning ) => {
-		list.appendChild( wpgpt_all_page_warnings_warning_item( warning, multipleForms ) );
+		list.appendChild( wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) );
 	} );
 	warnings.appendChild( list );
 	body.append( original, translated, warnings );
@@ -963,9 +1195,10 @@ function wpgpt_all_page_warnings_render_pagination( pageInfo, pagination ) {
  * @returns {void}
  */
 function wpgpt_all_page_warnings_render() {
-	const filtered = wpgpt_all_page_warnings_filter_results(
+	const filtered = wpgpt_all_page_warnings_apply_filters(
 		wpgptAllPageWarningsState.results,
-		wpgptAllPageWarningsState.selectedRules
+		wpgptAllPageWarningsState.selectedRules,
+		wpgptAllPageWarningsState.searchQuery
 	);
 	const summary = wpgpt_all_page_warnings_summarize( filtered );
 	const pageInfo = wpgpt_all_page_warnings_paginate(
@@ -988,7 +1221,7 @@ function wpgpt_all_page_warnings_render() {
 				'wpgpt-all-page-warnings__empty',
 				// 元の走査結果がある場合は絞り込み0件、ない場合は Warning 0件として案内を分ける。
 				wpgptAllPageWarningsState.results.length ?
-					'選択したルールに一致する Warning はありません。' :
+					'現在の絞り込み条件に一致する Warning はありません。' :
 					'Warning は見つかりませんでした。'
 			)
 		);
@@ -1022,6 +1255,7 @@ function wpgpt_all_page_warnings_render() {
 function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.results = [];
 	wpgptAllPageWarningsState.selectedRules.clear();
+	wpgptAllPageWarningsState.searchQuery = '';
 	wpgptAllPageWarningsState.page = 1;
 	wpgptAllPageWarningsState.checkedStrings = 0;
 	wpgptAllPageWarningsState.ui.content.hidden = true;
@@ -1154,8 +1388,50 @@ function wpgpt_all_page_warnings_build_ui() {
 		wpgpt_all_page_warnings_render();
 	} );
 	details.appendChild( clear );
+	const search = document.createElement( 'input' );
+	search.type = 'search';
+	search.className = 'wpgpt-all-page-warnings__search';
+	search.placeholder = '原文・訳文・Contextを検索';
+	search.setAttribute( 'aria-label', '原文・訳文・Contextを検索' );
+	search.addEventListener( 'input', () => {
+		wpgptAllPageWarningsState.searchQuery = search.value;
+		wpgptAllPageWarningsState.page = 1;
+		wpgpt_all_page_warnings_render();
+	} );
+
+	const copyAll = wpgpt_all_page_warnings_create_element( 'button', 'button', 'Markdownをコピー' );
+	copyAll.type = 'button';
+	const copyStatus = wpgpt_all_page_warnings_create_element(
+		'span',
+		'wpgpt-all-page-warnings__copy-status'
+	);
+	copyAll.addEventListener( 'click', async () => {
+		const filtered = wpgpt_all_page_warnings_apply_filters(
+			wpgptAllPageWarningsState.results,
+			wpgptAllPageWarningsState.selectedRules,
+			wpgptAllPageWarningsState.searchQuery
+		);
+		copyStatus.textContent = '';
+		if ( ! filtered.length ) {
+			copyStatus.textContent = 'コピー対象がありません';
+			return;
+		}
+		try {
+			await wpgpt_all_page_warnings_copy_text(
+				wpgpt_all_page_warnings_markdown_all(
+					filtered,
+					wpgptAllPageWarningsState.selectedRules,
+					wpgptAllPageWarningsState.searchQuery
+				)
+			);
+			copyStatus.textContent = '✓ Markdownをコピーしました（' + filtered.length + '文字列）';
+		} catch ( error ) {
+			copyStatus.textContent = 'Markdownをコピーできませんでした';
+		}
+	} );
+
 	const chips = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__chips' );
-	filters.append( details, chips );
+	filters.append( details, search, copyAll, copyStatus, chips );
 	content.appendChild( filters );
 
 	const toolbar = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__toolbar' );
@@ -1199,6 +1475,9 @@ function wpgpt_all_page_warnings_build_ui() {
 		stringCount,
 		checkedCount,
 		ruleOptions,
+		search,
+		copyAll,
+		copyStatus,
 		chips,
 		range,
 		resultPage,
@@ -1241,12 +1520,21 @@ function wpgpt_init_all_page_warnings() {
  */
 globalThis.wpgpt_all_page_warnings_test_api = {
 	hasUnsavedTranslations: wpgpt_all_page_warnings_has_unsaved_translations,
+	normalizeResult: wpgpt_all_page_warnings_normalize_result,
 	filterResults: wpgpt_all_page_warnings_filter_results,
+	searchResults: wpgpt_all_page_warnings_search_results,
+	applyFilters: wpgpt_all_page_warnings_apply_filters,
 	summarize: wpgpt_all_page_warnings_summarize,
 	paginate: wpgpt_all_page_warnings_paginate,
 	ruleOptions: wpgpt_all_page_warnings_rule_options,
 	collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
 	highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
+	normalizeRanges: wpgpt_all_page_warnings_normalize_ranges,
+	markdownLiteral: wpgpt_all_page_warnings_markdown_literal,
+	problemText: wpgpt_all_page_warnings_problem_text,
+	markdownAll: wpgpt_all_page_warnings_markdown_all,
+	markdownSingle: wpgpt_all_page_warnings_markdown_single,
+	copyText: wpgpt_all_page_warnings_copy_text,
 	buildExportUrl: wpgpt_all_page_warnings_build_export_url,
 	buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 	isPo: wpgpt_all_page_warnings_is_po,
