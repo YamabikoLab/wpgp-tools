@@ -39,6 +39,10 @@ function wpgpt_create_dirty_tracker() {
 			baselines.set( key, value );
 			currentValues.set( key, value );
 		},
+		remove( key ) {
+			baselines.delete( key );
+			currentValues.delete( key );
+		},
 		isDirty( key ) {
 			return baselines.has( key ) && currentValues.get( key ) !== baselines.get( key );
 		},
@@ -476,13 +480,12 @@ function wpgpt_all_page_warnings_original_id( row ) {
 
 function wpgpt_all_page_warnings_textarea_key( textarea ) {
 	const editor = textarea.closest( 'tr.editor' );
-	const originalId = wpgpt_all_page_warnings_original_id( editor );
-	if ( ! originalId ) {
+	if ( ! editor?.id ) {
 		return null;
 	}
 	const textareas = Array.from( editor.querySelectorAll( '.translation-wrapper div.textareas textarea' ) );
 	const formIndex = textareas.indexOf( textarea );
-	return 0 <= formIndex ? originalId + '::' + formIndex : null;
+	return 0 <= formIndex ? editor.id + '::' + formIndex : null;
 }
 
 function wpgpt_all_page_warnings_register_textareas( root = document ) {
@@ -501,22 +504,34 @@ function wpgpt_all_page_warnings_update_textarea( textarea ) {
 	}
 }
 
-function wpgpt_all_page_warnings_capture_save( button ) {
+function wpgpt_all_page_warnings_capture_save( button, pageDocument = document ) {
 	const editor = button.closest( 'tr.editor' );
 	const originalId = wpgpt_all_page_warnings_original_id( editor );
-	if ( ! originalId ) {
+	if ( ! editor?.id || ! originalId ) {
 		return;
 	}
 
 	const forms = Array.from(
 		editor.querySelectorAll( '.translation-wrapper div.textareas textarea' ),
-		( textarea ) => ( {
+		( textarea, formIndex ) => ( {
 			key: wpgpt_all_page_warnings_textarea_key( textarea ),
+			formIndex,
 			value: textarea.value,
 		} )
 	).filter( ( form ) => form.key );
+	const existingPreviewIds = new Set(
+		Array.from(
+			pageDocument.querySelectorAll( '#translations tbody tr[id^="preview-"]' )
+		)
+			.filter( ( preview ) => originalId === wpgpt_all_page_warnings_original_id( preview ) )
+			.map( ( preview ) => preview.id )
+	);
 
-	wpgptAllPageWarningsState.pendingSaves.set( originalId, forms );
+	wpgptAllPageWarningsState.pendingSaves.set( editor.id, {
+		originalId,
+		forms,
+		existingPreviewIds,
+	} );
 }
 
 function wpgpt_all_page_warnings_reconcile_pending_saves( pageDocument = document ) {
@@ -524,9 +539,12 @@ function wpgpt_all_page_warnings_reconcile_pending_saves( pageDocument = documen
 		pageDocument.querySelectorAll( '#translations tbody tr[id^="preview-"]' )
 	);
 
-	wpgptAllPageWarningsState.pendingSaves.forEach( ( forms, originalId ) => {
+	wpgptAllPageWarningsState.pendingSaves.forEach( ( pending, editorId ) => {
 		const savedPreview = previews.find( ( preview ) => {
-			if ( originalId !== wpgpt_all_page_warnings_original_id( preview ) ) {
+			if (
+				pending.originalId !== wpgpt_all_page_warnings_original_id( preview ) ||
+				pending.existingPreviewIds.has( preview.id )
+			) {
 				return false;
 			}
 			const previewValues = Array.from(
@@ -534,16 +552,21 @@ function wpgpt_all_page_warnings_reconcile_pending_saves( pageDocument = documen
 				( translation ) => translation.textContent
 			);
 			return (
-				forms.length === previewValues.length &&
-				forms.every( ( form, index ) => form.value === previewValues[ index ] )
+				pending.forms.length === previewValues.length &&
+				pending.forms.every( ( form, index ) => form.value === previewValues[ index ] )
 			);
 		} );
 
 		if ( savedPreview ) {
-			forms.forEach( ( form ) => {
-				wpgptAllPageWarningsState.dirtyTracker.markSaved( form.key, form.value );
+			const newEditorId = savedPreview.id.replace( /^preview-/u, 'editor-' );
+			pending.forms.forEach( ( form ) => {
+				wpgptAllPageWarningsState.dirtyTracker.remove( form.key );
+				wpgptAllPageWarningsState.dirtyTracker.markSaved(
+					newEditorId + '::' + form.formIndex,
+					form.value
+				);
 			} );
-			wpgptAllPageWarningsState.pendingSaves.delete( originalId );
+			wpgptAllPageWarningsState.pendingSaves.delete( editorId );
 		}
 	} );
 }
@@ -1028,6 +1051,7 @@ globalThis.wpgpt_all_page_warnings_test_api = {
 	updateTextarea: wpgpt_all_page_warnings_update_textarea,
 	captureSave: wpgpt_all_page_warnings_capture_save,
 	reconcilePendingSaves: wpgpt_all_page_warnings_reconcile_pending_saves,
+	isDirty: ( key ) => wpgptAllPageWarningsState.dirtyTracker.isDirty( key ),
 	hasDirty: () => wpgptAllPageWarningsState.dirtyTracker.hasDirty(),
 	filterResults: wpgpt_all_page_warnings_filter_results,
 	summarize: wpgpt_all_page_warnings_summarize,
