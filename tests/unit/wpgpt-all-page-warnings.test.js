@@ -95,7 +95,6 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			ruleOptions: wpgpt_all_page_warnings_rule_options,
 			collectJapaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings,
 			highlightRanges: wpgpt_all_page_warnings_highlight_ranges,
-			normalizeRanges: wpgpt_all_page_warnings_normalize_ranges,
 			slackLiteral: wpgpt_all_page_warnings_slack_literal,
 			slackProblemText: wpgpt_all_page_warnings_slack_problem_text,
 			slackAll: wpgpt_all_page_warnings_slack_all,
