@@ -308,14 +308,24 @@ describe( 'Warning Slack copy generation', () => {
 		assert.equal( literal, '```\n# Title *bold*\n```' );
 	} );
 
-	test( 'problem text clamps and merges ranges before adding Slack bold markers', () => {
+	test( 'problem text clamps and merges ranges before adding visible problem markers', () => {
 		const api = loadAllPageWarnings();
 		const marked = api.slackProblemText(
 			'WordPressは便利',
 			{ matches: [ { start: 0, end: 4 }, { start: 3, end: 9 }, { start: 99, end: 120 } ] }
 		);
 
-		assert.equal( marked, '*WordPress*は便利' );
+		assert.equal( marked, '【WordPress】は便利' );
+	} );
+
+	test( 'problem text keeps punctuation-only locations visible without relying on Slack bold', () => {
+		const api = loadAllPageWarnings();
+		const marked = api.slackProblemText(
+			'修正:「フォームで並び替え」で変更を反映します。',
+			{ matches: [ { start: 2, end: 4 } ] }
+		);
+
+		assert.equal( marked, '修正【:「】フォームで並び替え」で変更を反映します。' );
 	} );
 
 	test( 'full Slack copy uses only displayWarnings and includes context, forms, problem location, and URL', () => {
@@ -335,7 +345,7 @@ describe( 'Warning Slack copy generation', () => {
 		assert.ok( output.includes( '*Translation Form #1*' ) );
 		assert.ok( output.includes( '*Translation Form #2*' ) );
 		assert.ok( output.includes( '*Problem location*' ) );
-		assert.ok( output.includes( '*WordPressは*便利です。' ) );
+		assert.ok( output.includes( '```\n【WordPressは】便利です。\n```' ) );
 		assert.ok( output.includes( 'General [warning]' ) );
 		assert.ok( output.includes( result.sourceUrl ) );
 	} );
