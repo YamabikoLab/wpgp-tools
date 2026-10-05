@@ -362,6 +362,7 @@ describe( 'Warning Slack copy generation', () => {
 		const result = slackResult();
 		const output = api.slackSingle( result, result.displayWarnings[ 1 ] );
 
+		assert.ok( output.includes( '*Translation Form #2*' ) );
 		assert.ok( output.includes( '_second_' ) );
 		assert.ok( output.includes( 'General [warning]' ) );
 		assert.equal( output.includes( '1-4 *warning*' ), false );
