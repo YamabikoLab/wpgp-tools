@@ -277,8 +277,8 @@ describe( 'all-page Warning normalization and search', () => {
 	} );
 } );
 
-describe( 'Warning Markdown generation', () => {
-	function markdownResult() {
+describe( 'Warning Slack copy generation', () => {
+	function slackResult() {
 		return {
 			context: '# button',
 			original: '# Title with ``` fence',
@@ -301,56 +301,55 @@ describe( 'Warning Markdown generation', () => {
 		};
 	}
 
-	test( 'literal blocks protect Markdown syntax and choose a safe fence', () => {
+	test( 'literal blocks keep user text inside Slack code blocks', () => {
 		const api = loadAllPageWarnings();
-		const literal = api.markdownLiteral( '# Title ``` code' );
+		const literal = api.slackLiteral( '# Title *bold*' );
 
-		assert.ok( literal.startsWith( '````text\n' ) );
-		assert.ok( literal.includes( '# Title ``` code' ) );
-		assert.ok( literal.endsWith( '\n````' ) );
+		assert.equal( literal, '```\n# Title *bold*\n```' );
 	} );
 
-	test( 'problem text clamps and merges ranges before adding visible markers', () => {
+	test( 'problem text clamps and merges ranges before adding Slack bold markers', () => {
 		const api = loadAllPageWarnings();
-		const marked = api.problemText(
+		const marked = api.slackProblemText(
 			'WordPressは便利',
 			{ matches: [ { start: 0, end: 4 }, { start: 3, end: 9 }, { start: 99, end: 120 } ] }
 		);
 
-		assert.equal( marked, '【WordPress】は便利' );
+		assert.equal( marked, '*WordPress*は便利' );
 	} );
 
-	test( 'full Markdown uses only displayWarnings and includes context, forms, problem location, and URL', () => {
+	test( 'full Slack copy uses only displayWarnings and includes context, forms, problem location, and URL', () => {
 		const api = loadAllPageWarnings();
-		const result = markdownResult();
-		const markdown = api.markdownAll(
+		const result = slackResult();
+		const output = api.slackAll(
 			[ result ],
 			new Set( [ 'ja_half_full_spacing' ] ),
 			'WordPress'
 		);
 
-		assert.ok( markdown.includes( '対象: 1文字列 / 2 Warnings' ) );
-		assert.ok( markdown.includes( 'ルール: 1-4' ) );
-		assert.ok( markdown.includes( '検索:' ) );
-		assert.ok( markdown.includes( 'WordPress' ) );
-		assert.ok( markdown.includes( '# button' ) );
-		assert.ok( markdown.includes( '**Translation Form #1**' ) );
-		assert.ok( markdown.includes( '**Translation Form #2**' ) );
-		assert.ok( markdown.includes( '**Problem location**' ) );
-		assert.ok( markdown.includes( '【WordPressは】' ) );
-		assert.ok( markdown.includes( 'General [warning]' ) );
-		assert.ok( markdown.includes( result.sourceUrl ) );
+		assert.ok( output.includes( '対象: 1文字列 / 2 Warnings' ) );
+		assert.ok( output.includes( 'ルール: 1-4' ) );
+		assert.ok( output.includes( '検索:' ) );
+		assert.ok( output.includes( 'WordPress' ) );
+		assert.ok( output.includes( '# button' ) );
+		assert.ok( output.includes( '*Translation Form #1*' ) );
+		assert.ok( output.includes( '*Translation Form #2*' ) );
+		assert.ok( output.includes( '*Problem location*' ) );
+		assert.ok( output.includes( '**WordPressは**' ) === false );
+		assert.ok( output.includes( '*WordPressは*' ) );
+		assert.ok( output.includes( 'General [warning]' ) );
+		assert.ok( output.includes( result.sourceUrl ) );
 	} );
 
-	test( 'single-Warning Markdown contains only the selected Warning and its translation form', () => {
+	test( 'single-Warning Slack copy contains only the selected Warning and its translation form', () => {
 		const api = loadAllPageWarnings();
-		const result = markdownResult();
-		const markdown = api.markdownSingle( result, result.displayWarnings[ 1 ] );
+		const result = slackResult();
+		const output = api.slackSingle( result, result.displayWarnings[ 1 ] );
 
-		assert.ok( markdown.includes( '_second_' ) );
-		assert.ok( markdown.includes( 'General [warning]' ) );
-		assert.equal( markdown.includes( '1-4 *warning*' ), false );
-		assert.equal( markdown.includes( '*WordPressは*便利です。' ), false );
+		assert.ok( output.includes( '_second_' ) );
+		assert.ok( output.includes( 'General [warning]' ) );
+		assert.equal( output.includes( '1-4 *warning*' ), false );
+		assert.equal( output.includes( '*WordPressは*便利です。' ), false );
 	} );
 
 	test( 'copy helper resolves only after writeText succeeds and rejects failures', async () => {
