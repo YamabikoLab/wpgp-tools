@@ -1,14 +1,12 @@
-/* global wpgpt_settings, wpgpt_is_japanese_locale, wpgpt_run_checks, wpgpt_ja_check_punctuation, wpgpt_ja_check_half_width, wpgpt_ja_check_half_full_spacing, wpgpt_ja_check_parentheses, wpgpt_ja_check_inner_parentheses_spacing, wpgpt_ja_check_period_inside_parentheses, wpgpt_ja_check_sentence_ending_parentheses, wpgpt_ja_check_number_spacing, wpgpt_ja_check_recommended_expressions, wpgpt_ja_check_view_expression, wpgpt_ja_check_not_allowed_expression, wpgpt_ja_check_sorry_prefix, wpgpt_ja_check_middle_dot */
-
 /**
- * GlotPress の現在の検索条件・ステータスに対応する翻訳集合を PO 形式で取得し、
- * ブラウザー内で既存の Warning 判定と日本語翻訳ルール判定を一括実行する機能を提供する。
+ * GlotPress の翻訳一覧を対象に、現在の絞り込み条件に対応する翻訳データを一括確認する機能を提供する。
  *
- * このファイルは、全件確認の開始条件、走査結果の保持、ルール別絞り込み、ページ分割、
- * 問題箇所の強調表示、および結果一覧の画面表示を所有する。
- * 翻訳の保存処理そのものは所有せず、未保存判定は走査開始時点の GlotPress の textarea を
- * 保存済み初期値と比較して行う。
+ * このファイルは、全件確認の開始条件、取得した翻訳データの解析、指摘結果の保持、
+ * 絞り込み・検索・ページ分割、問題箇所の表示、Slack 共有用文字列の生成、結果画面の状態管理を所有する。
+ * 翻訳の保存処理そのものは所有せず、保存前の編集がある場合はサーバー側データとの不一致を避けるため確認を開始しない。
  */
+
+/* global wpgpt_settings, wpgpt_is_japanese_locale, wpgpt_run_checks, wpgpt_ja_check_punctuation, wpgpt_ja_check_half_width, wpgpt_ja_check_half_full_spacing, wpgpt_ja_check_parentheses, wpgpt_ja_check_inner_parentheses_spacing, wpgpt_ja_check_period_inside_parentheses, wpgpt_ja_check_sentence_ending_parentheses, wpgpt_ja_check_number_spacing, wpgpt_ja_check_recommended_expressions, wpgpt_ja_check_view_expression, wpgpt_ja_check_not_allowed_expression, wpgpt_ja_check_sorry_prefix, wpgpt_ja_check_middle_dot */
 
 /**
  * 全件確認結果で絞り込み対象として扱う日本語翻訳ルール。
@@ -39,20 +37,25 @@ const WPGPT_ALL_PAGE_WARNING_RULES = [
  * @returns {Object} displayWarnings を持つ正規化済み結果。
  */
 function wpgpt_all_page_warnings_normalize_result( result ) {
+	// 構造化された日本語指摘は既存 Warning の補完にだけ使い、同じ指摘を追加件数として扱わない。
 	const unusedFindings = ( result.japaneseFindings || [] ).map( ( finding ) => ( {
 		...finding,
 		used: false,
 	} ) );
 
+	// 既存 Warning を基準に1件ずつ補完し、正規化前後で Warning の論理件数を維持する。
 	const displayWarnings = result.warnings.map( ( warning ) => {
+		// 同じ訳文フォーム・同じ指摘内容に対応する未使用の日本語指摘だけを補完元として採用する。
 		const finding = unusedFindings.find( ( candidate ) =>
 			! candidate.used &&
 			candidate.form === warning.form &&
 			candidate.style_guide_item + ': ' + candidate.message === warning.text
 		);
+		// 対応する日本語指摘がない一般 Warning は既存情報を保持し、位置情報なしとして共通形式へ揃える。
 		if ( ! finding ) {
 			return {
 				...warning,
+				// 位置情報を持たない Warning も後続処理で同じ契約として扱えるよう、範囲は常に配列にする。
 				matches: Array.isArray( warning.matches ) ? warning.matches : [],
 			};
 		}
@@ -62,6 +65,7 @@ function wpgpt_all_page_warnings_normalize_result( result ) {
 			...warning,
 			setting: finding.setting,
 			styleGuideItem: finding.style_guide_item,
+			// 構造化指摘に位置情報がない場合も、問題箇所を推測せず空配列として扱う。
 			matches: Array.isArray( finding.matches ) ? finding.matches : [],
 		};
 	} );
@@ -83,16 +87,21 @@ function wpgpt_all_page_warnings_normalize_result( result ) {
  * @returns {Object[]} 一覧表示に使用する Warning を付与した翻訳文字列。
  */
 function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
+	// 絞り込みの有無にかかわらず、すべての結果を同じ Warning 表現へ揃えてから表示条件を適用する。
 	const normalized = results.map( wpgpt_all_page_warnings_normalize_result );
 
+	// ルール未選択時は Warning を減らさず、正規化済みの全結果を表示対象とする。
 	if ( ! selectedRules || 0 === selectedRules.size ) {
 		return normalized;
 	}
 
+	// 各翻訳文字列について選択ルールに該当する Warning だけを残し、該当文字列だけを結果集合へ含める。
 	return normalized.reduce( ( filtered, result ) => {
+		// 複数ルール選択は OR 条件とし、いずれかの選択ルールに属する Warning を表示対象とする。
 		const matching = result.displayWarnings.filter(
 			( warning ) => warning.setting && selectedRules.has( warning.setting )
 		);
+		// 表示対象 Warning が1件以上ある翻訳文字列だけを、絞り込み後の一覧へ残す。
 		if ( matching.length ) {
 			filtered.push( {
 				...result,
@@ -112,16 +121,19 @@ function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
  */
 function wpgpt_all_page_warnings_search_results( results, searchQuery ) {
 	const query = String( searchQuery || '' ).trim().toLocaleLowerCase();
+	// 空の検索条件は検索なしとして扱い、ルール絞り込み後の結果をそのまま保持する。
 	if ( ! query ) {
 		return results;
 	}
 
+	// 各翻訳文字列を独立して判定し、検索対象のいずれかに部分一致する項目だけを残す。
 	return results.filter( ( result ) => {
 		const searchable = [
 			result.original,
 			result.context || '',
 			...( result.translations || [] ),
 		];
+		// 原文・文脈・すべての訳文フォームのいずれかに一致すれば、その翻訳文字列を検索結果とする。
 		return searchable.some( ( value ) => String( value || '' ).toLocaleLowerCase().includes( query ) );
 	} );
 }
@@ -480,6 +492,7 @@ function wpgpt_all_page_warnings_parse_po( po ) {
 		match = line.match( /^msgstr(?:\[(\d+)\])?\s+(".*")\s*$/u );
 		// 訳文定義はフォーム番号ごとに保持し、単数形ではフォーム0として統一する。
 		if ( match ) {
+			// 単数形の訳文はフォーム0として扱い、複数形では PO に記録されたフォーム番号をそのまま使用する。
 			const index = undefined === match[ 1 ] ? 0 : Number.parseInt( match[ 1 ], 10 );
 			ensureEntry().translations[ index ] = wpgpt_all_page_warnings_unquote_po( match[ 2 ] );
 			activeField = { type: 'translation', index };
@@ -628,26 +641,28 @@ function wpgpt_all_page_warnings_create_element( tagName, className, text ) {
 }
 
 /**
- * 訳文中で強調表示する日本語ルール指摘範囲を決定する。
+ * 指摘位置を、画面表示と共有用出力で共通利用できる安全な範囲へ正規化する。
  *
- * 現在表示しているフォームと絞り込みルールだけを対象にし、訳文範囲外や不正な位置を除外する。
- * 重複・連続する指摘範囲は一つへ統合し、同じ文字列を重ねて強調しない。
+ * 訳文の外側を指す位置は文字列境界へ収め、成立しない範囲は除外する。
+ * 重複または連続する範囲は1つに統合し、同じ問題箇所を重ねて表示しない。
  *
- * @param {Object} result 1翻訳文字列分の全件確認結果。
- * @param {number} form 強調対象の訳文フォーム番号。
- * @param {Set<string>} selectedRules 現在選択中の絞り込みルール。
+ * @param {Object[]} matches 指摘が示す開始位置と終了位置の集合。
  * @param {number} textLength 対象訳文の文字数。
- * @returns {Object[]} 重複を統合した強調表示範囲。
+ * @returns {Object[]} 表示可能な範囲へ補正・統合した指摘位置。
  */
 function wpgpt_all_page_warnings_normalize_ranges( matches, textLength ) {
+	// 位置情報がない Warning も同じ契約で扱い、存在する指摘だけを訳文の有効範囲へ収める。
 	const ranges = ( Array.isArray( matches ) ? matches : [] )
+		// 各指摘は訳文の先頭から末尾までの範囲を越えない位置として扱う。
 		.map( ( match ) => ( {
 			start: Math.max( 0, Math.min( textLength, match.start ) ),
 			end: Math.max( 0, Math.min( textLength, match.end ) ),
 		} ) )
+		// 開始・終了位置が整数で、実際に1文字以上を指す範囲だけを表示対象とする。
 		.filter( ( match ) => Number.isInteger( match.start ) && Number.isInteger( match.end ) && match.start < match.end )
 		.sort( ( a, b ) => a.start - b.start || a.end - b.end );
 
+	// 位置順に確認し、重複または連続する指摘を一つの表示範囲へまとめる。
 	return ranges.reduce( ( merged, range ) => {
 		const previous = merged[ merged.length - 1 ];
 		// 直前の範囲と重なる、または連続する指摘は一つの強調範囲として扱う。
@@ -660,11 +675,27 @@ function wpgpt_all_page_warnings_normalize_ranges( matches, textLength ) {
 	}, [] );
 }
 
+/**
+ * 現在の表示条件に対応する訳文フォームについて、強調表示する問題位置を決定する。
+ *
+ * 対象フォームに属し、現在のルール絞り込みで除外されていない Warning の位置情報だけを使用する。
+ * 問題位置を持たない Warning から位置を推測せず、正規化処理と同じ境界規則を適用する。
+ *
+ * @param {Object} result 1翻訳文字列分の全件確認結果。
+ * @param {number} form 強調対象の訳文フォーム番号。
+ * @param {Set<string>} selectedRules 現在選択中の絞り込みルール。
+ * @param {number} textLength 対象訳文の文字数。
+ * @returns {Object[]} 現在の表示条件で強調する問題位置。
+ */
 function wpgpt_all_page_warnings_highlight_ranges( result, form, selectedRules, textLength ) {
+	// 画面表示用に正規化済みの Warning を優先し、旧形式の結果でも日本語指摘を参照できるようにする。
 	const warnings = result.displayWarnings || result.japaneseFindings || [];
 	const matches = warnings
+		// 複数形では、現在表示している訳文フォームに属する指摘だけを対象とする。
 		.filter( ( warning ) => warning.form === form )
+		// ルール絞り込み中は、表示対象から外れた日本語ルールの問題位置を混在させない。
 		.filter( ( warning ) => ! selectedRules?.size || ! warning.setting || selectedRules.has( warning.setting ) )
+		// 位置情報を持つ Warning だけを強調対象とし、位置情報がない指摘は推測しない。
 		.flatMap( ( warning ) => Array.isArray( warning.matches ) ? warning.matches : [] );
 
 	return wpgpt_all_page_warnings_normalize_ranges( matches, textLength );
@@ -728,12 +759,14 @@ function wpgpt_all_page_warnings_slack_problem_text( translation, warning ) {
 		warning.matches,
 		translation.length
 	);
+	// 位置情報がない Warning では問題箇所を推測せず、確認用訳文そのものを出力しない。
 	if ( ! ranges.length ) {
 		return '';
 	}
 
 	let cursor = 0;
 	let output = '';
+	// すべての問題範囲を訳文の並び順で示し、複数箇所の指摘でも同じ確認用訳文で判別できるようにする。
 	ranges.forEach( ( range ) => {
 		output += translation.slice( cursor, range.start );
 		output += '【' + translation.slice( range.start, range.end ) + '】';
@@ -742,16 +775,30 @@ function wpgpt_all_page_warnings_slack_problem_text( translation, warning ) {
 	return output + translation.slice( cursor );
 }
 
+/**
+ * 1件の Warning を、Slack で共有するための独立した指摘ブロックへ変換する。
+ *
+ * 複数形では対象フォームを明示し、位置情報がある場合だけ問題箇所の確認用訳文を追加する。
+ *
+ * @param {Object} warning 共有対象の Warning。
+ * @param {string} translation Warning が属する訳文。
+ * @param {boolean} multipleForms 複数の訳文フォームを区別する必要があるかどうか。
+ * @param {number|null} index 一覧内の Warning 番号。個別共有では番号を付けない。
+ * @returns {string} Slack へ貼り付ける1件分の指摘ブロック。
+ */
 function wpgpt_all_page_warnings_slack_warning( warning, translation, multipleForms, index = null ) {
 	const lines = [];
+	// 一覧共有では順序を判別できる番号を付け、個別共有では単独の Warning 見出しとする。
 	const heading = null === index ? '*Warning*' : '*Warning ' + index + '*';
 	lines.push( heading );
+	// 複数形の翻訳だけフォーム番号を表示し、単数形では不要な情報を増やさない。
 	if ( multipleForms ) {
 		lines.push( 'Form #' + warning.form );
 	}
 	lines.push( wpgpt_all_page_warnings_slack_literal( warning.text ) );
 
 	const problemText = wpgpt_all_page_warnings_slack_problem_text( translation, warning );
+	// 位置情報を持つ Warning だけ問題箇所表示を追加し、位置不明の指摘は Warning 文言だけを共有する。
 	if ( problemText ) {
 		lines.push(
 			'',
@@ -762,16 +809,28 @@ function wpgpt_all_page_warnings_slack_warning( warning, translation, multipleFo
 	return lines.join( '\n' );
 }
 
+/**
+ * 1つの翻訳文字列について、原文・訳文・対象 Warning・確認先を Slack 共有用にまとめる。
+ *
+ * 共有対象の Warning は呼び出し側から渡された集合だけを使用し、同じ文字列に属する非表示 Warning を混在させない。
+ *
+ * @param {Object} result 共有対象の翻訳文字列。
+ * @param {Object[]} warnings 共有対象として確定済みの Warning。
+ * @returns {string} Slack へ貼り付ける1翻訳文字列分の内容。
+ */
 function wpgpt_all_page_warnings_slack_result( result, warnings = result.displayWarnings ) {
 	const lines = [];
+	// 文脈がある翻訳では用途を判断できるよう共有し、文脈なしでは空の見出しを作らない。
 	if ( result.context ) {
 		lines.push( '*Context*', wpgpt_all_page_warnings_slack_literal( result.context ), '' );
 	}
 	lines.push( '*Original*', wpgpt_all_page_warnings_slack_literal( result.original ), '' );
 
 	const multipleForms = result.translations.length > 1;
+	// 複数形を含むすべての訳文フォームを共有し、一覧全体のレビューで原文との対応を失わない。
 	result.translations.forEach( ( translation, index ) => {
 		lines.push(
+			// 複数フォームがある場合だけ番号を付け、各訳文を区別できる見出しにする。
 			multipleForms ? '*Translation Form #' + ( index + 1 ) + '*' : '*Translation*',
 			wpgpt_all_page_warnings_slack_literal( translation ),
 			''
@@ -779,7 +838,9 @@ function wpgpt_all_page_warnings_slack_result( result, warnings = result.display
 	} );
 
 	lines.push( '*Warnings*' );
+	// 共有対象として確定した Warning を順に出力し、各指摘を対応する訳文フォームと組み合わせる。
 	warnings.forEach( ( warning, index ) => {
+		// 対応フォームが存在しない場合は位置表示を作らず、Warning 文言だけを共有できる空文字列とする。
 		const translation = result.translations[ warning.form - 1 ] || '';
 		lines.push(
 			wpgpt_all_page_warnings_slack_warning(
@@ -795,19 +856,34 @@ function wpgpt_all_page_warnings_slack_result( result, warnings = result.display
 	return lines.join( '\n' ).trim();
 }
 
+/**
+ * 現在の絞り込み条件に一致する結果全体を、Slack 共有用のレビュー文へ変換する。
+ *
+ * ページ表示には依存せず、呼び出し側で確定した全結果を対象とする。
+ * 選択中ルールと検索条件はレビュー条件として先頭に示す。
+ *
+ * @param {Object[]} results 現在の絞り込み条件に一致する全結果。
+ * @param {Set<string>} selectedRules 現在選択中の日本語翻訳ルール。
+ * @param {string} searchQuery 現在の文字列検索条件。
+ * @returns {string} Slack へ貼り付けるレビュー全文。
+ */
 function wpgpt_all_page_warnings_slack_all( results, selectedRules, searchQuery ) {
 	const summary = wpgpt_all_page_warnings_summarize( results );
+	// 選択中ルールだけをレビュー条件として示し、未選択ルールは共有内容へ含めない。
 	const selectedLabels = WPGPT_ALL_PAGE_WARNING_RULES
 		.filter( ( rule ) => selectedRules?.has( rule.setting ) )
+		// 利用者が一覧で認識しているスタイルガイド番号だけを簡潔な条件表示へ使用する。
 		.map( ( rule ) => rule.label.split( ' ' )[ 0 ] );
 
 	const lines = [
 		'*Warning レビュー*',
 		'対象: ' + summary.strings + '文字列 / ' + summary.warnings + ' Warnings',
 	];
+	// ルールが選択されている場合だけ、レビュー対象を限定した条件として共有する。
 	if ( selectedLabels.length ) {
 		lines.push( 'ルール: ' + selectedLabels.join( ', ' ) );
 	}
+	// 空でない検索条件だけを共有し、検索なしのレビューには不要な条件欄を追加しない。
 	if ( String( searchQuery || '' ).trim() ) {
 		lines.push(
 			'検索:',
@@ -815,6 +891,7 @@ function wpgpt_all_page_warnings_slack_all( results, selectedRules, searchQuery 
 		);
 	}
 
+	// 絞り込み後の全翻訳文字列を共有し、ページングによってレビュー対象が欠落しないようにする。
 	results.forEach( ( result, index ) => {
 		lines.push(
 			'',
@@ -827,9 +904,20 @@ function wpgpt_all_page_warnings_slack_all( results, selectedRules, searchQuery 
 	return lines.join( '\n' ).replace( /\n──────────$/u, '' ).trim();
 }
 
+/**
+ * 利用者が選択した1件の Warning だけを Slack 共有用の内容へ変換する。
+ *
+ * 同じ翻訳文字列に別の Warning があっても混在させず、対象 Warning が属する訳文フォームだけを共有する。
+ *
+ * @param {Object} result 対象 Warning が属する翻訳文字列。
+ * @param {Object} warning 利用者が個別共有を選択した Warning。
+ * @returns {string} Slack へ貼り付ける1件分のレビュー内容。
+ */
 function wpgpt_all_page_warnings_slack_single( result, warning ) {
+	// 対応フォームが存在しない場合でも Warning 文言と確認先は共有できるよう、訳文は空文字列として扱う。
 	const translation = result.translations[ warning.form - 1 ] || '';
 	const lines = [];
+	// 文脈がある場合だけ共有し、同一原文の用途をレビュー時に判別できるようにする。
 	if ( result.context ) {
 		lines.push( '*Context*', wpgpt_all_page_warnings_slack_literal( result.context ), '' );
 	}
@@ -848,7 +936,16 @@ function wpgpt_all_page_warnings_slack_single( result, warning ) {
 	return lines.join( '\n' ).trim();
 }
 
+/**
+ * 生成済みの共有文字列をクリップボードへ書き込み、完了後にだけ成功として扱える境界を提供する。
+ *
+ * @param {string} text クリップボードへ書き込む共有文字列。
+ * @param {Object} clipboard 書き込みに使用する Clipboard API。単体テストでは代替実装を渡せる。
+ * @returns {Promise<void>} クリップボードへの書き込み完了を表す Promise。
+ * @throws {Error} Clipboard API を利用できない場合、または書き込みに失敗した場合。
+ */
 async function wpgpt_all_page_warnings_copy_text( text, clipboard = navigator.clipboard ) {
+	// 書き込み機能を利用できない環境では成功扱いにせず、呼び出し側で失敗表示できるよう中止する。
 	if ( ! clipboard || 'function' !== typeof clipboard.writeText ) {
 		throw new Error( 'Clipboard API is not available.' );
 	}
@@ -1039,6 +1136,7 @@ function wpgpt_all_page_warnings_render_chips() {
  *
  * @param {Object} warning 表示対象の Warning。
  * @param {boolean} multipleForms 複数の訳文フォームを区別して表示する必要があるかどうか。
+ * @param {Object} result 対象 Warning が属する翻訳文字列。個別コピー内容の生成に使用する。
  * @returns {HTMLElement} Warning の一覧項目。
  */
 function wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) {
@@ -1068,11 +1166,13 @@ function wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) 
 	copy.addEventListener( 'click', async () => {
 		copyStatus.textContent = '';
 		try {
+			// コピーが完了した場合だけ成功表示へ切り替え、利用者へ誤った完了状態を示さない。
 			await wpgpt_all_page_warnings_copy_text(
 				wpgpt_all_page_warnings_slack_single( result, warning )
 			);
 			copyStatus.textContent = '✓ コピーしました';
 		} catch ( error ) {
+			// 権限や実行環境の理由で失敗した場合は、成功表示を残さずこの指摘の近くで失敗を知らせる。
 			copyStatus.textContent = 'コピーできませんでした';
 		}
 	} );
@@ -1267,9 +1367,11 @@ function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.page = 1;
 	wpgptAllPageWarningsState.checkedStrings = 0;
 	wpgptAllPageWarningsState.ui.content.hidden = true;
+	// 検索欄が構築済みの場合だけ表示値も初期化し、再走査時に前回条件を持ち越さない。
 	if ( wpgptAllPageWarningsState.ui.search ) {
 		wpgptAllPageWarningsState.ui.search.value = '';
 	}
+	// コピー状態が構築済みの場合だけ前回の成功・失敗表示を消し、新しい走査結果と混同させない。
 	if ( wpgptAllPageWarningsState.ui.copyStatus ) {
 		wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
 	}
@@ -1323,11 +1425,13 @@ async function wpgpt_all_page_warnings_scan() {
 		wpgpt_all_page_warnings_render();
 		wpgptAllPageWarningsState.ui.scan.textContent = 'Scan again';
 	} catch ( error ) {
+		// 取得・解析・判定のいずれかが失敗した場合は途中結果を成功扱いせず、走査未完了として通知する。
 		wpgpt_all_page_warnings_set_status(
 			'Scan incomplete. ' + error.message,
 			'error'
 		);
 	} finally {
+		// 成功・失敗にかかわらず操作抑止を解除し、利用者が再試行できる状態へ戻す。
 		wpgpt_all_page_warnings_set_scanning( false );
 	}
 }
@@ -1426,11 +1530,13 @@ function wpgpt_all_page_warnings_build_ui() {
 			wpgptAllPageWarningsState.searchQuery
 		);
 		copyStatus.textContent = '';
+		// 現在の絞り込み条件に一致する結果がない場合は、空の共有内容をコピーせず利用者へ知らせる。
 		if ( ! filtered.length ) {
 			copyStatus.textContent = 'コピー対象がありません';
 			return;
 		}
 		try {
+			// 現在の絞り込み結果全体を書き込めた場合だけ、コピー成功を表示する。
 			await wpgpt_all_page_warnings_copy_text(
 				wpgpt_all_page_warnings_slack_all(
 					filtered,
@@ -1440,6 +1546,7 @@ function wpgpt_all_page_warnings_build_ui() {
 			);
 			copyStatus.textContent = '✓ Slack用テキストをコピーしました（' + filtered.length + '文字列）';
 		} catch ( error ) {
+			// クリップボードへの書き込み失敗時は成功表示を出さず、利用者へ再試行可能な失敗として通知する。
 			copyStatus.textContent = 'Slack用テキストをコピーできませんでした';
 		}
 	} );
