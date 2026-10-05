@@ -714,14 +714,14 @@ function wpgpt_all_page_warnings_slack_literal( value ) {
 }
 
 /**
- * Warning の位置情報を使い、Slack で問題箇所だけが太字になる確認用訳文を作成する。
+ * Warning の位置情報を使い、Slack で問題箇所を明示した確認用訳文を作成する。
  *
- * 正確な訳文は別途コードブロックで出力するため、この文字列は問題箇所を見つけやすくする
- * レビュー補助表示として扱う。
+ * 記号や空白だけが問題箇所でも判別できるよう、Slack の太字記法には依存せず、
+ * 対象範囲を「【...】」で囲む。正確な訳文は別途コードブロックで保持する。
  *
  * @param {string} translation 対象 Warning が属する訳文。
  * @param {Object} warning 表示対象の Warning。
- * @returns {string} 問題箇所を Slack の太字記法で囲んだ確認用訳文。
+ * @returns {string} 問題箇所を「【...】」で囲んだ確認用訳文。
  */
 function wpgpt_all_page_warnings_slack_problem_text( translation, warning ) {
 	const ranges = wpgpt_all_page_warnings_normalize_ranges(
@@ -736,7 +736,7 @@ function wpgpt_all_page_warnings_slack_problem_text( translation, warning ) {
 	let output = '';
 	ranges.forEach( ( range ) => {
 		output += translation.slice( cursor, range.start );
-		output += '*' + translation.slice( range.start, range.end ) + '*';
+		output += '【' + translation.slice( range.start, range.end ) + '】';
 		cursor = range.end;
 	} );
 	return output + translation.slice( cursor );
@@ -756,7 +756,7 @@ function wpgpt_all_page_warnings_slack_warning( warning, translation, multipleFo
 		lines.push(
 			'',
 			'*Problem location*',
-			problemText
+			wpgpt_all_page_warnings_slack_literal( problemText )
 		);
 	}
 	return lines.join( '\n' );
