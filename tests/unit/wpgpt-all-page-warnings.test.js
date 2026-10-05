@@ -104,6 +104,8 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 			isPo: wpgpt_all_page_warnings_is_po,
 			parsePo: wpgpt_all_page_warnings_parse_po,
+			translationStyleGuideUrl: WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_URL,
+			translationStyleGuideUpdatedAt: WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_UPDATED_AT,
 		})`,
 		context
 	);
@@ -155,6 +157,18 @@ function sampleResults() {
 		},
 	];
 }
+
+describe( 'Japanese translation style guide reference', () => {
+	test( 'keeps the reference URL and checked guide revision explicit', () => {
+		const api = loadAllPageWarnings();
+
+		assert.equal(
+			api.translationStyleGuideUrl,
+			'https://ja.wordpress.org/team/handbook/translation/translation-style-guide/'
+		);
+		assert.equal( api.translationStyleGuideUpdatedAt, '2026年8月28日' );
+	} );
+} );
 
 describe( 'all-page Warning result filtering', () => {
 	test( 'without a Japanese rule filter, keeps every Warning for every affected string', () => {
