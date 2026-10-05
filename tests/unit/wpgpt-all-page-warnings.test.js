@@ -89,13 +89,14 @@ function sampleResults() {
 			id: '101',
 			warnings: [
 				{ text: 'General warning', form: 1, setting: null },
-				{ text: '1-4 warning', form: 1, setting: null },
+				{ text: '1-4 半角文字と全角文字の間のスペース: スペースを確認してください', form: 1, setting: null },
 			],
 			japaneseFindings: [
 				{
 					setting: 'ja_half_full_spacing',
 					style_guide_item: '1-4 半角文字と全角文字の間のスペース',
 					message: 'スペースを確認してください',
+					matches: [ { start: 0, end: 9 } ],
 					form: 1,
 				},
 			],
@@ -103,13 +104,14 @@ function sampleResults() {
 		{
 			id: '102',
 			warnings: [
-				{ text: '1-1 warning', form: 1, setting: null },
+				{ text: '1-1 日本語の句読点: 句読点を確認してください', form: 1, setting: null },
 			],
 			japaneseFindings: [
 				{
 					setting: 'ja_punctuation',
 					style_guide_item: '1-1 日本語の句読点',
 					message: '句読点を確認してください',
+					matches: [ { start: 0, end: 1 } ],
 					form: 1,
 				},
 			],
@@ -176,6 +178,198 @@ describe( 'all-page Warning result filtering', () => {
 		assert.equal( page.items.length, 21 );
 		assert.equal( page.items[ 0 ].id, '76' );
 		assert.equal( results.length, 96 );
+	} );
+} );
+
+
+describe( 'all-page Warning normalization and search', () => {
+	function searchableResults() {
+		return [
+			{
+				id: '201',
+				context: 'Button label',
+				original: 'Use WordPress here.',
+				translations: [ 'WordPressは便利です。', '別の訳文' ],
+				sourceUrl: 'https://translate.wordpress.org/example/201',
+				warnings: [
+					{ text: 'General warning', form: 1, setting: null },
+					{
+						text: '1-4 半角文字と全角文字の間のスペース: スペースを確認してください',
+						form: 1,
+						setting: null,
+					},
+				],
+				japaneseFindings: [
+					{
+						setting: 'ja_half_full_spacing',
+						style_guide_item: '1-4 半角文字と全角文字の間のスペース',
+						message: 'スペースを確認してください',
+						form: 1,
+						matches: [ { start: 0, end: 9 } ],
+					},
+				],
+			},
+			{
+				id: '202',
+				context: null,
+				original: 'Save changes',
+				translations: [ '変更を保存' ],
+				sourceUrl: 'https://translate.wordpress.org/example/202',
+				warnings: [ { text: 'General warning', form: 1, setting: null } ],
+				japaneseFindings: [],
+			},
+		];
+	}
+
+	test( 'normalization adds Japanese metadata without changing the logical Warning count', () => {
+		const api = loadAllPageWarnings();
+		const normalized = api.normalizeResult( searchableResults()[ 0 ] );
+
+		assert.equal( normalized.displayWarnings.length, 2 );
+		assert.equal( normalized.displayWarnings[ 0 ].text, 'General warning' );
+		assert.equal( normalized.displayWarnings[ 1 ].setting, 'ja_half_full_spacing' );
+		assert.deepEqual(
+			normalize( normalized.displayWarnings[ 1 ].matches ),
+			[ { start: 0, end: 9 } ]
+		);
+	} );
+
+	test( 'search matches original, translations, context, plural forms, and ignores case', () => {
+		const api = loadAllPageWarnings();
+		const results = api.filterResults( searchableResults(), new Set() );
+
+		assert.deepEqual(
+			normalize( api.searchResults( results, 'wordpress' ).map( ( result ) => result.id ) ),
+			[ '201' ]
+		);
+		assert.deepEqual(
+			normalize( api.searchResults( results, 'BUTTON' ).map( ( result ) => result.id ) ),
+			[ '201' ]
+		);
+		assert.deepEqual(
+			normalize( api.searchResults( results, '別の訳文' ).map( ( result ) => result.id ) ),
+			[ '201' ]
+		);
+		assert.deepEqual(
+			normalize( api.searchResults( results, '変更を保存' ).map( ( result ) => result.id ) ),
+			[ '202' ]
+		);
+		assert.equal( api.searchResults( results, 'missing' ).length, 0 );
+		assert.equal( api.searchResults( results, '   ' ).length, 2 );
+	} );
+
+	test( 'rule filter and text search use AND semantics', () => {
+		const api = loadAllPageWarnings();
+		const matched = api.applyFilters(
+			searchableResults(),
+			new Set( [ 'ja_half_full_spacing' ] ),
+			'wordpress'
+		);
+		const missed = api.applyFilters(
+			searchableResults(),
+			new Set( [ 'ja_half_full_spacing' ] ),
+			'Save changes'
+		);
+
+		assert.deepEqual( normalize( matched.map( ( result ) => result.id ) ), [ '201' ] );
+		assert.equal( matched[ 0 ].displayWarnings.length, 1 );
+		assert.equal( missed.length, 0 );
+	} );
+} );
+
+describe( 'Warning Markdown generation', () => {
+	function markdownResult() {
+		return {
+			context: '# button',
+			original: '# Title with ``` fence',
+			translations: [ '*WordPressは*便利です。', '_second_' ],
+			sourceUrl: 'https://translate.wordpress.org/projects/example/ja/default/?filters=1',
+			displayWarnings: [
+				{
+					text: '1-4 *warning*',
+					form: 1,
+					setting: 'ja_half_full_spacing',
+					matches: [ { start: 1, end: 10 }, { start: 8, end: 30 } ],
+				},
+				{
+					text: 'General [warning]',
+					form: 2,
+					setting: null,
+					matches: [],
+				},
+			],
+		};
+	}
+
+	test( 'literal blocks protect Markdown syntax and choose a safe fence', () => {
+		const api = loadAllPageWarnings();
+		const literal = api.markdownLiteral( '# Title ``` code' );
+
+		assert.ok( literal.startsWith( '````text\n' ) );
+		assert.ok( literal.includes( '# Title ``` code' ) );
+		assert.ok( literal.endsWith( '\n````' ) );
+	} );
+
+	test( 'problem text clamps and merges ranges before adding visible markers', () => {
+		const api = loadAllPageWarnings();
+		const marked = api.problemText(
+			'WordPressは便利',
+			{ matches: [ { start: 0, end: 4 }, { start: 3, end: 9 }, { start: 99, end: 120 } ] }
+		);
+
+		assert.equal( marked, '【WordPress】は便利' );
+	} );
+
+	test( 'full Markdown uses only displayWarnings and includes context, forms, problem location, and URL', () => {
+		const api = loadAllPageWarnings();
+		const result = markdownResult();
+		const markdown = api.markdownAll(
+			[ result ],
+			new Set( [ 'ja_half_full_spacing' ] ),
+			'WordPress'
+		);
+
+		assert.ok( markdown.includes( '対象: 1文字列 / 2 Warnings' ) );
+		assert.ok( markdown.includes( 'ルール: 1-4' ) );
+		assert.ok( markdown.includes( '検索: WordPress' ) );
+		assert.ok( markdown.includes( '# button' ) );
+		assert.ok( markdown.includes( '**Translation Form #1**' ) );
+		assert.ok( markdown.includes( '**Translation Form #2**' ) );
+		assert.ok( markdown.includes( '**Problem location**' ) );
+		assert.ok( markdown.includes( '【WordPressは】' ) );
+		assert.ok( markdown.includes( 'General [warning]' ) );
+		assert.ok( markdown.includes( result.sourceUrl ) );
+	} );
+
+	test( 'single-Warning Markdown contains only the selected Warning and its translation form', () => {
+		const api = loadAllPageWarnings();
+		const result = markdownResult();
+		const markdown = api.markdownSingle( result, result.displayWarnings[ 1 ] );
+
+		assert.ok( markdown.includes( '_second_' ) );
+		assert.ok( markdown.includes( 'General [warning]' ) );
+		assert.equal( markdown.includes( '1-4 *warning*' ), false );
+		assert.equal( markdown.includes( '*WordPressは*便利です。' ), false );
+	} );
+
+	test( 'copy helper resolves only after writeText succeeds and rejects failures', async () => {
+		const api = loadAllPageWarnings();
+		let copied = '';
+		await api.copyText( 'review', {
+			async writeText( value ) {
+				copied = value;
+			},
+		} );
+		assert.equal( copied, 'review' );
+
+		await assert.rejects(
+			api.copyText( 'review', {
+				async writeText() {
+					throw new Error( 'denied' );
+				},
+			} ),
+			/denied/u
+		);
 	} );
 } );
 
