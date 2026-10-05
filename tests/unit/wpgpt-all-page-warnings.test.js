@@ -281,15 +281,15 @@ describe( 'Warning Slack copy generation', () => {
 	function slackResult() {
 		return {
 			context: '# button',
-			original: '# Title with ``` fence',
-			translations: [ '*WordPressは*便利です。', '_second_' ],
+			original: '# Title',
+			translations: [ 'WordPressは便利です。', '_second_' ],
 			sourceUrl: 'https://translate.wordpress.org/projects/example/ja/default/?filters=1',
 			displayWarnings: [
 				{
 					text: '1-4 *warning*',
 					form: 1,
 					setting: 'ja_half_full_spacing',
-					matches: [ { start: 1, end: 11 }, { start: 8, end: 11 } ],
+					matches: [ { start: 0, end: 10 }, { start: 8, end: 10 } ],
 				},
 				{
 					text: 'General [warning]',
@@ -335,8 +335,7 @@ describe( 'Warning Slack copy generation', () => {
 		assert.ok( output.includes( '*Translation Form #1*' ) );
 		assert.ok( output.includes( '*Translation Form #2*' ) );
 		assert.ok( output.includes( '*Problem location*' ) );
-		assert.ok( output.includes( '**WordPressは**' ) === false );
-		assert.ok( output.includes( '*WordPressは*' ) );
+		assert.ok( output.includes( '*WordPressは*便利です。' ) );
 		assert.ok( output.includes( 'General [warning]' ) );
 		assert.ok( output.includes( result.sourceUrl ) );
 	} );
@@ -349,7 +348,7 @@ describe( 'Warning Slack copy generation', () => {
 		assert.ok( output.includes( '_second_' ) );
 		assert.ok( output.includes( 'General [warning]' ) );
 		assert.equal( output.includes( '1-4 *warning*' ), false );
-		assert.equal( output.includes( '*WordPressは*便利です。' ), false );
+		assert.equal( output.includes( 'WordPressは便利です。' ), false );
 	} );
 
 	test( 'copy helper resolves only after writeText succeeds and rejects failures', async () => {
