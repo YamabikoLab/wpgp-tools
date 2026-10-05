@@ -162,8 +162,9 @@ table.translations th:last-child, table.translations td:last-child { width: 74px
 .results-toolbar .spacer { flex: 1; }
 select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white; }
 .result-card { border: 1px solid #dcdcde; margin-bottom: 9px; background: #fff; }
-.result-card__head { display: flex; gap: 10px; align-items: center; background: #f6f7f7; border-bottom: 1px solid #ddd; padding: 9px 11px; }
+.result-card__head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #f6f7f7; border-bottom: 1px solid #ddd; padding: 9px 11px; }
 .result-card__head .spacer { flex: 1; }
+.result-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .result-card__body { padding: 11px 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
 .field label { display: block; color: var(--wp-muted); font-size: 12px; margin-bottom: 3px; }
 .warnings { grid-column: 1 / -1; }
@@ -220,6 +221,7 @@ select { border: 1px solid #8c8f94; padding: 6px 28px 6px 8px; background: white
       <div>
         <h2>全件の Warning を確認</h2>
         <p>現在の検索・ステータス等を反映した翻訳データを一度だけ取得し、ブラウザー内で Warning を確認します。</p>
+        <p style="margin-top:6px">日本語チェックは、2026年8月28日最終更新の翻訳スタイルガイドに基づいています。</p>
       </div>
       <div class="spacer"></div>
       <button class="button primary" id="scanBtn">全件を確認</button>
@@ -393,7 +395,7 @@ function renderResults() {
   visible.forEach(item => {
     const warnings = selectedRules.size ? item.warnings.filter(w=>selectedRules.has(w.rule)) : item.warnings;
     html += `<article class="result-card">
-      <div class="result-card__head"><strong>翻訳文字列</strong><span class="spacer"></span><a>GlotPressで確認 ↗</a></div>
+      <div class="result-card__head"><strong>翻訳文字列</strong><span class="spacer"></span><span class="result-card__actions"><a href="https://translate.wordpress.org/" target="_blank" rel="noopener">GlotPressで確認 ↗</a><a href="https://ja.wordpress.org/team/handbook/translation/translation-style-guide/" target="_blank" rel="noopener">翻訳スタイルガイド ↗</a></span></div>
       <div class="result-card__body">
         <div class="field"><label>原文</label><div>${item.original}</div></div>
         <div class="field"><label>翻訳</label><div>${item.translation}</div></div>
