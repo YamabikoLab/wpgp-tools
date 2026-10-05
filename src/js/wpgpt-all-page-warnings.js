@@ -469,13 +469,20 @@ const wpgptAllPageWarningsState = {
 	ui: {},
 };
 
+function wpgpt_all_page_warnings_original_id( row ) {
+	const match = row?.id?.match( /^(?:editor|preview)-(\d+)(?:-\d+)?$/u );
+	return match ? match[ 1 ] : null;
+}
+
 function wpgpt_all_page_warnings_textarea_key( textarea ) {
 	const editor = textarea.closest( 'tr.editor' );
-	if ( ! editor?.id ) {
+	const originalId = wpgpt_all_page_warnings_original_id( editor );
+	if ( ! originalId ) {
 		return null;
 	}
 	const textareas = Array.from( editor.querySelectorAll( '.translation-wrapper div.textareas textarea' ) );
-	return editor.id + '::' + textareas.indexOf( textarea );
+	const formIndex = textareas.indexOf( textarea );
+	return 0 <= formIndex ? originalId + '::' + formIndex : null;
 }
 
 function wpgpt_all_page_warnings_register_textareas( root = document ) {
@@ -487,9 +494,17 @@ function wpgpt_all_page_warnings_register_textareas( root = document ) {
 	} );
 }
 
+function wpgpt_all_page_warnings_update_textarea( textarea ) {
+	const key = wpgpt_all_page_warnings_textarea_key( textarea );
+	if ( key ) {
+		wpgptAllPageWarningsState.dirtyTracker.update( key, textarea.value );
+	}
+}
+
 function wpgpt_all_page_warnings_capture_save( button ) {
 	const editor = button.closest( 'tr.editor' );
-	if ( ! editor?.id ) {
+	const originalId = wpgpt_all_page_warnings_original_id( editor );
+	if ( ! originalId ) {
 		return;
 	}
 
@@ -501,28 +516,34 @@ function wpgpt_all_page_warnings_capture_save( button ) {
 		} )
 	).filter( ( form ) => form.key );
 
-	wpgptAllPageWarningsState.pendingSaves.set( editor.id, forms );
+	wpgptAllPageWarningsState.pendingSaves.set( originalId, forms );
 }
 
-function wpgpt_all_page_warnings_reconcile_pending_saves() {
-	wpgptAllPageWarningsState.pendingSaves.forEach( ( forms, editorId ) => {
-		const preview = document.getElementById( editorId.replace( 'editor', 'preview' ) );
-		if ( ! preview ) {
-			return;
-		}
+function wpgpt_all_page_warnings_reconcile_pending_saves( pageDocument = document ) {
+	const previews = Array.from(
+		pageDocument.querySelectorAll( '#translations tbody tr[id^="preview-"]' )
+	);
 
-		const previewValues = Array.from(
-			preview.querySelectorAll( '.translation-text' ),
-			( translation ) => translation.textContent
-		);
-		if (
-			forms.length === previewValues.length &&
-			forms.every( ( form, index ) => form.value === previewValues[ index ] )
-		) {
+	wpgptAllPageWarningsState.pendingSaves.forEach( ( forms, originalId ) => {
+		const savedPreview = previews.find( ( preview ) => {
+			if ( originalId !== wpgpt_all_page_warnings_original_id( preview ) ) {
+				return false;
+			}
+			const previewValues = Array.from(
+				preview.querySelectorAll( '.translation-text' ),
+				( translation ) => translation.textContent
+			);
+			return (
+				forms.length === previewValues.length &&
+				forms.every( ( form, index ) => form.value === previewValues[ index ] )
+			);
+		} );
+
+		if ( savedPreview ) {
 			forms.forEach( ( form ) => {
 				wpgptAllPageWarningsState.dirtyTracker.markSaved( form.key, form.value );
 			} );
-			wpgptAllPageWarningsState.pendingSaves.delete( editorId );
+			wpgptAllPageWarningsState.pendingSaves.delete( originalId );
 		}
 	} );
 }
@@ -539,20 +560,14 @@ function wpgpt_all_page_warnings_init_dirty_tracking() {
 		if ( 'TEXTAREA' !== event.target.tagName ) {
 			return;
 		}
-		const key = wpgpt_all_page_warnings_textarea_key( event.target );
-		if ( key ) {
-			wpgptAllPageWarningsState.dirtyTracker.update( key, event.target.value );
-		}
+		wpgpt_all_page_warnings_update_textarea( event.target );
 	} );
 
 	translations.addEventListener( 'change', ( event ) => {
 		if ( 'TEXTAREA' !== event.target.tagName ) {
 			return;
 		}
-		const key = wpgpt_all_page_warnings_textarea_key( event.target );
-		if ( key ) {
-			wpgptAllPageWarningsState.dirtyTracker.update( key, event.target.value );
-		}
+		wpgpt_all_page_warnings_update_textarea( event.target );
 	} );
 
 	translations.addEventListener( 'click', ( event ) => {
@@ -1008,6 +1023,12 @@ function wpgpt_init_all_page_warnings() {
 
 globalThis.wpgpt_all_page_warnings_test_api = {
 	createDirtyTracker: wpgpt_create_dirty_tracker,
+	textareaKey: wpgpt_all_page_warnings_textarea_key,
+	registerTextareas: wpgpt_all_page_warnings_register_textareas,
+	updateTextarea: wpgpt_all_page_warnings_update_textarea,
+	captureSave: wpgpt_all_page_warnings_capture_save,
+	reconcilePendingSaves: wpgpt_all_page_warnings_reconcile_pending_saves,
+	hasDirty: () => wpgptAllPageWarningsState.dirtyTracker.hasDirty(),
 	filterResults: wpgpt_all_page_warnings_filter_results,
 	summarize: wpgpt_all_page_warnings_summarize,
 	paginate: wpgpt_all_page_warnings_paginate,
