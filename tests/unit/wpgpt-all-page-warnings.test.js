@@ -395,4 +395,74 @@ describe( 'unsaved translation tracking', () => {
 		assert.equal( tracker.baseline( 'editor-1::0' ), 'saved' );
 		assert.equal( tracker.hasDirty(), false );
 	} );
+
+	test( 'clears dirty state after GlotPress replaces the saved row with a new translation ID', () => {
+		const api = loadAllPageWarnings();
+		const beforeEditor = {
+			id: 'editor-123-456',
+			querySelectorAll() {
+				return [ beforeTextarea ];
+			},
+		};
+		const beforeTextarea = {
+			value: '保存済み',
+			closest() {
+				return beforeEditor;
+			},
+		};
+		const beforeRoot = {
+			querySelectorAll() {
+				return [ beforeTextarea ];
+			},
+		};
+
+		api.registerTextareas( beforeRoot );
+		beforeTextarea.value = '保存後';
+		api.updateTextarea( beforeTextarea );
+		assert.equal( api.hasDirty(), true );
+
+		api.captureSave( {
+			closest() {
+				return beforeEditor;
+			},
+		} );
+
+		const afterEditor = {
+			id: 'editor-123-789',
+			querySelectorAll() {
+				return [ afterTextarea ];
+			},
+		};
+		const afterTextarea = {
+			value: '保存後',
+			closest() {
+				return afterEditor;
+			},
+		};
+		const afterRoot = {
+			querySelectorAll() {
+				return [ afterTextarea ];
+			},
+		};
+		const preview = {
+			id: 'preview-123-789',
+			querySelectorAll() {
+				return [ { textContent: '保存後' } ];
+			},
+		};
+		const pageDocument = {
+			querySelectorAll() {
+				return [ preview ];
+			},
+		};
+
+		assert.equal( api.textareaKey( beforeTextarea ), '123::0' );
+		assert.equal( api.textareaKey( afterTextarea ), '123::0' );
+
+		api.registerTextareas( afterRoot );
+		assert.equal( api.hasDirty(), true );
+
+		api.reconcilePendingSaves( pageDocument );
+		assert.equal( api.hasDirty(), false );
+	} );
 } );
