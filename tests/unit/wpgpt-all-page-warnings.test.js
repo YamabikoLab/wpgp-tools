@@ -341,170 +341,82 @@ describe( 'PO export scanning', () => {
 	} );
 } );
 
-describe( 'unsaved translation tracking', () => {
-	test( 'becomes dirty only while the current value differs from its saved baseline', () => {
+describe( 'unsaved translation detection', () => {
+	function rootWithTextareas( textareas ) {
+		return {
+			querySelectorAll( selector ) {
+				assert.equal(
+					selector,
+					'#translations tbody tr.editor .translation-wrapper div.textareas textarea'
+				);
+				return textareas;
+			},
+		};
+	}
+
+	test( 'reports no unsaved translations when every textarea matches its default value', () => {
 		const api = loadAllPageWarnings();
-		const tracker = api.createDirtyTracker();
+		const root = rootWithTextareas( [
+			{ value: '保存済み', defaultValue: '保存済み' },
+			{ value: '複数形', defaultValue: '複数形' },
+		] );
 
-		tracker.register( 'editor-1::0', '保存済み' );
-		assert.equal( tracker.hasDirty(), false );
-
-		tracker.update( 'editor-1::0', '編集中' );
-		assert.equal( tracker.hasDirty(), true );
-
-		tracker.update( 'editor-1::0', '保存済み' );
-		assert.equal( tracker.hasDirty(), false );
+		assert.equal( api.hasUnsavedTranslations( root ), false );
 	} );
 
-	test( 'tracks multiple editors independently and only clears the successfully saved one', () => {
+	test( 'reports unsaved translations when any textarea differs from its default value', () => {
 		const api = loadAllPageWarnings();
-		const tracker = api.createDirtyTracker();
+		const root = rootWithTextareas( [
+			{ value: '保存済み', defaultValue: '保存済み' },
+			{ value: '編集中', defaultValue: '保存前' },
+		] );
 
-		tracker.register( 'editor-1::0', 'A' );
-		tracker.register( 'editor-2::0', 'B' );
-		tracker.update( 'editor-1::0', 'A2' );
-		tracker.update( 'editor-2::0', 'B2' );
-
-		tracker.markSaved( 'editor-1::0', 'A2' );
-
-		assert.equal( tracker.isDirty( 'editor-1::0' ), false );
-		assert.equal( tracker.isDirty( 'editor-2::0' ), true );
-		assert.equal( tracker.hasDirty(), true );
-		assert.deepEqual( normalize( tracker.dirtyKeys() ), [ 'editor-2::0' ] );
+		assert.equal( api.hasUnsavedTranslations( root ), true );
 	} );
 
-	test( 'a failed save leaves the previous baseline and dirty state intact', () => {
+	test( 'detects a changed plural form among otherwise unchanged editors', () => {
 		const api = loadAllPageWarnings();
-		const tracker = api.createDirtyTracker();
+		const root = rootWithTextareas( [
+			{ value: 'A', defaultValue: 'A' },
+			{ value: 'B', defaultValue: 'B' },
+			{ value: 'C2', defaultValue: 'C' },
+			{ value: 'D', defaultValue: 'D' },
+		] );
 
-		tracker.register( 'editor-1::0', 'before' );
-		tracker.update( 'editor-1::0', 'after' );
-
-		assert.equal( tracker.baseline( 'editor-1::0' ), 'before' );
-		assert.equal( tracker.isDirty( 'editor-1::0' ), true );
+		assert.equal( api.hasUnsavedTranslations( root ), true );
 	} );
 
-	test( 'registering a dynamically replaced textarea keeps its existing saved baseline', () => {
+	test( 'treats replacement textareas with saved values as clean', () => {
 		const api = loadAllPageWarnings();
-		const tracker = api.createDirtyTracker();
+		const root = rootWithTextareas( [
+			{ value: '保存後', defaultValue: '保存後' },
+		] );
 
-		tracker.register( 'editor-1::0', 'saved' );
-		tracker.update( 'editor-1::0', 'dirty' );
-		tracker.register( 'editor-1::0', 'saved' );
-
-		assert.equal( tracker.baseline( 'editor-1::0' ), 'saved' );
-		assert.equal( tracker.hasDirty(), false );
+		assert.equal( api.hasUnsavedTranslations( root ), false );
 	} );
 
-	test( 'keeps same-original editors independent and migrates only the saved row after replacement', () => {
+	test( 'reports no unsaved translations when no editor textareas exist', () => {
 		const api = loadAllPageWarnings();
 
-		const editorA = {
-			id: 'editor-123-456',
-			querySelectorAll() {
-				return [ textareaA ];
-			},
-		};
-		const textareaA = {
-			value: 'A',
-			closest() {
-				return editorA;
-			},
-		};
-		const editorB = {
-			id: 'editor-123-789',
-			querySelectorAll() {
-				return [ textareaB ];
-			},
-		};
-		const textareaB = {
-			value: 'B',
-			closest() {
-				return editorB;
-			},
-		};
-		const initialRoot = {
-			querySelectorAll() {
-				return [ textareaA, textareaB ];
-			},
-		};
+		assert.equal( api.hasUnsavedTranslations( rootWithTextareas( [] ) ), false );
+	} );
 
-		api.registerTextareas( initialRoot );
+	test( 'does not expose removed dirty tracking APIs', () => {
+		const api = loadAllPageWarnings();
+		const removed = [
+			'createDirtyTracker',
+			'textareaKey',
+			'registerTextareas',
+			'updateTextarea',
+			'captureSave',
+			'reconcilePendingSaves',
+			'isDirty',
+			'hasDirty',
+		];
 
-		assert.equal( api.textareaKey( textareaA ), 'editor-123-456::0' );
-		assert.equal( api.textareaKey( textareaB ), 'editor-123-789::0' );
-		assert.equal( api.hasDirty(), false );
-
-		textareaA.value = 'A2';
-		api.updateTextarea( textareaA );
-
-		assert.equal( api.isDirty( 'editor-123-456::0' ), true );
-		assert.equal( api.isDirty( 'editor-123-789::0' ), false );
-
-		const existingPreviewA = {
-			id: 'preview-123-456',
-			querySelectorAll() {
-				return [ { textContent: 'A' } ];
-			},
-		};
-		const existingPreviewB = {
-			id: 'preview-123-789',
-			querySelectorAll() {
-				return [ { textContent: 'B' } ];
-			},
-		};
-		const beforeSaveDocument = {
-			querySelectorAll() {
-				return [ existingPreviewA, existingPreviewB ];
-			},
-		};
-
-		api.captureSave(
-			{
-				closest() {
-					return editorA;
-				},
-			},
-			beforeSaveDocument
-		);
-
-		const afterEditorA = {
-			id: 'editor-123-999',
-			querySelectorAll() {
-				return [ afterTextareaA ];
-			},
-		};
-		const afterTextareaA = {
-			value: 'A2',
-			closest() {
-				return afterEditorA;
-			},
-		};
-		const newPreviewA = {
-			id: 'preview-123-999',
-			querySelectorAll() {
-				return [ { textContent: 'A2' } ];
-			},
-		};
-		const afterSaveDocument = {
-			querySelectorAll() {
-				return [ existingPreviewB, newPreviewA ];
-			},
-		};
-
-		api.registerTextareas( {
-			querySelectorAll() {
-				return [ afterTextareaA, textareaB ];
-			},
+		removed.forEach( ( name ) => {
+			assert.equal( Object.hasOwn( api, name ), false );
 		} );
-
-		assert.equal( api.hasDirty(), true );
-
-		api.reconcilePendingSaves( afterSaveDocument );
-
-		assert.equal( api.isDirty( 'editor-123-456::0' ), false );
-		assert.equal( api.isDirty( 'editor-123-999::0' ), false );
-		assert.equal( api.isDirty( 'editor-123-789::0' ), false );
-		assert.equal( api.hasDirty(), false );
+		assert.equal( typeof api.hasUnsavedTranslations, 'function' );
 	} );
 } );
