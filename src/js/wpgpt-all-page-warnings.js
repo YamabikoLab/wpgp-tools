@@ -33,17 +33,13 @@ const WPGPT_ALL_PAGE_WARNING_RULES = [
 ];
 
 /**
- * 全件確認結果を、利用者が選択した日本語翻訳ルールに従って表示用結果へ絞り込む。
+ * 走査結果の Warning 件数を変えずに、日本語指摘のルール識別子と問題位置を表示用 Warning へ補完する。
  *
- * ルール未選択時は走査結果を欠落なく表示し、ルール選択時は選択ルールに該当する
- * 日本語判定だけを表示対象とする。複数ルール選択時は OR 条件として扱う。
- *
- * @param {Object[]} results 全件確認で Warning が見つかった翻訳文字列。
- * @param {Set<string>} selectedRules 利用者が絞り込み対象として選択したルール識別子。
- * @returns {Object[]} 一覧表示に使用する Warning を付与した翻訳文字列。
+ * @param {Object} result 全件確認で Warning が見つかった1つの翻訳文字列。
+ * @returns {Object} displayWarnings を持つ正規化済み結果。
  */
 function wpgpt_all_page_warnings_normalize_result( result ) {
-	const unusedFindings = result.japaneseFindings.map( ( finding ) => ( {
+	const unusedFindings = ( result.japaneseFindings || [] ).map( ( finding ) => ( {
 		...finding,
 		used: false,
 	} ) );
@@ -76,6 +72,16 @@ function wpgpt_all_page_warnings_normalize_result( result ) {
 	};
 }
 
+/**
+ * 全件確認結果を、利用者が選択した日本語翻訳ルールに従って表示用結果へ絞り込む。
+ *
+ * ルール未選択時は正規化済み Warning をすべて保持し、ルール選択時は選択ルールに
+ * 対応する Warning だけを残す。複数ルール選択時は OR 条件として扱う。
+ *
+ * @param {Object[]} results 全件確認で Warning が見つかった翻訳文字列。
+ * @param {Set<string>} selectedRules 利用者が絞り込み対象として選択したルール識別子。
+ * @returns {Object[]} 一覧表示に使用する Warning を付与した翻訳文字列。
+ */
 function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
 	const normalized = results.map( wpgpt_all_page_warnings_normalize_result );
 
@@ -800,7 +806,11 @@ function wpgpt_all_page_warnings_markdown_all( results, selectedRules, searchQue
 		lines.push( 'ルール: ' + selectedLabels.join( ', ' ) );
 	}
 	if ( String( searchQuery || '' ).trim() ) {
-		lines.push( '検索: ' + String( searchQuery ).trim() );
+		lines.push(
+			'検索:',
+			'',
+			wpgpt_all_page_warnings_markdown_literal( String( searchQuery ).trim() )
+		);
 	}
 
 	results.forEach( ( result, index ) => {
@@ -1259,6 +1269,12 @@ function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.page = 1;
 	wpgptAllPageWarningsState.checkedStrings = 0;
 	wpgptAllPageWarningsState.ui.content.hidden = true;
+	if ( wpgptAllPageWarningsState.ui.search ) {
+		wpgptAllPageWarningsState.ui.search.value = '';
+	}
+	if ( wpgptAllPageWarningsState.ui.copyStatus ) {
+		wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
+	}
 	wpgptAllPageWarningsState.ui.results.replaceChildren();
 	wpgptAllPageWarningsState.ui.paginationTop.replaceChildren();
 	wpgptAllPageWarningsState.ui.paginationBottom.replaceChildren();
