@@ -37,6 +37,10 @@
 	color: #646970;
 }
 
+.wpgpt-all-page-warnings__head .wpgpt-all-page-warnings__style-guide-note {
+	margin-top: 6px;
+}
+
 .wpgpt-all-page-warnings__status {
 	padding: 12px 18px;
 	border-bottom: 1px solid #dcdcde;
@@ -220,7 +224,10 @@
 	background: #f6f7f7;
 }
 
-.wpgpt-all-page-warnings__card-head .button {
+.wpgpt-all-page-warnings__card-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	margin-left: auto;
 }
 
@@ -333,8 +340,12 @@
 	}
 
 	.wpgpt-all-page-warnings__toolbar .button:last-child,
-	.wpgpt-all-page-warnings__card-head .button {
+	.wpgpt-all-page-warnings__card-actions {
 		margin-left: 0;
+	}
+
+	.wpgpt-all-page-warnings__card-actions {
+		width: 100%;
 	}
 }
 
