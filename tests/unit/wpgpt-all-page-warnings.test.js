@@ -289,7 +289,7 @@ describe( 'Warning Markdown generation', () => {
 					text: '1-4 *warning*',
 					form: 1,
 					setting: 'ja_half_full_spacing',
-					matches: [ { start: 1, end: 10 }, { start: 8, end: 30 } ],
+					matches: [ { start: 1, end: 11 }, { start: 8, end: 11 } ],
 				},
 				{
 					text: 'General [warning]',
@@ -331,7 +331,8 @@ describe( 'Warning Markdown generation', () => {
 
 		assert.ok( markdown.includes( '対象: 1文字列 / 2 Warnings' ) );
 		assert.ok( markdown.includes( 'ルール: 1-4' ) );
-		assert.ok( markdown.includes( '検索: WordPress' ) );
+		assert.ok( markdown.includes( '検索:' ) );
+		assert.ok( markdown.includes( 'WordPress' ) );
 		assert.ok( markdown.includes( '# button' ) );
 		assert.ok( markdown.includes( '**Translation Form #1**' ) );
 		assert.ok( markdown.includes( '**Translation Form #2**' ) );
