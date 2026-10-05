@@ -14,6 +14,15 @@
  * ここに含まれるルールだけを利用者向けの絞り込み候補として表示し、
  * 実際に Warning が存在しないルールは候補から除外する。
  */
+/**
+ * 日本語チェックが基準とする WordPress 日本語翻訳スタイルガイドの情報。
+ *
+ * 翻訳スタイルガイドの更新へ自動追従させず、日本語チェック仕様を追従した時点で
+ * URL と基準日を実装と同時に更新する。
+ */
+const WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_URL = 'https://ja.wordpress.org/team/handbook/translation/translation-style-guide/';
+const WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_UPDATED_AT = '2026年8月28日';
+
 const WPGPT_ALL_PAGE_WARNING_RULES = [
 	{ setting: 'ja_punctuation', label: '1-1 日本語の句読点' },
 	{ setting: 'ja_half_width', label: '1-2 英数字・記号の半角表記' },
@@ -1199,11 +1208,24 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	// 文脈付き翻訳では文脈を見出しに示し、同じ原文の別用途を区別できるようにする。
 	const sourceLabel = result.context ? 'Context: ' + result.context : '翻訳文字列';
 	head.appendChild( wpgpt_all_page_warnings_create_element( 'strong', '', sourceLabel ) );
+	const actions = wpgpt_all_page_warnings_create_element(
+		'span',
+		'wpgpt-all-page-warnings__card-actions'
+	);
 	const open = wpgpt_all_page_warnings_create_element( 'a', 'button', 'GlotPressで確認' );
 	open.href = result.sourceUrl;
 	open.target = '_blank';
 	open.rel = 'noopener';
-	head.appendChild( open );
+	actions.appendChild( open );
+	// 日本語ロケールでは、指摘内容の正式な基準を同じ操作領域から確認できるようにする。
+	if ( wpgpt_is_japanese_locale() ) {
+		const styleGuide = wpgpt_all_page_warnings_create_element( 'a', 'button', '翻訳スタイルガイド' );
+		styleGuide.href = WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_URL;
+		styleGuide.target = '_blank';
+		styleGuide.rel = 'noopener';
+		actions.appendChild( styleGuide );
+	}
+	head.appendChild( actions );
 	card.appendChild( head );
 
 	const body = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__card-body' );
@@ -1459,6 +1481,17 @@ function wpgpt_all_page_warnings_build_ui() {
 			'現在の検索・ステータス等を反映した翻訳データを一度だけ取得し、ブラウザー内で Warning を確認します。'
 		)
 	);
+	// 日本語チェックを利用する画面だけ、現在の実装が基準とするスタイルガイドの版を明示する。
+	if ( wpgpt_is_japanese_locale() ) {
+		titleWrap.appendChild(
+			wpgpt_all_page_warnings_create_element(
+				'p',
+				'wpgpt-all-page-warnings__style-guide-note',
+				'日本語チェックは、' + WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_UPDATED_AT +
+					'最終更新の翻訳スタイルガイドに基づいています。'
+			)
+		);
+	}
 	const scan = wpgpt_all_page_warnings_create_element( 'button', 'button is-primary', 'Scan all warnings' );
 	scan.type = 'button';
 	scan.addEventListener( 'click', wpgpt_all_page_warnings_scan );
