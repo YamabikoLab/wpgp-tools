@@ -1,3 +1,12 @@
+# 2.3.0
+11.10.2026
+
+- Add a "My suggestion" label to identify your own Waiting translations
+- Match translation authors using WordPress.org profile URLs
+- Automatically update labels when translation rows or statuses change
+- Prevent duplicate and stale labels
+- Add automated tests for Waiting suggestion identification
+
 # 2.2.0
 05.10.2026
 
