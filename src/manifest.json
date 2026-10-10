@@ -8,6 +8,7 @@
 			"resources": [
 				"js/wpgpt-checks.js",
 				"js/wpgpt-all-page-warnings.js",
+				"js/wpgpt-my-suggestion.js",
 				"js/wpgpt-settings.js",
 				"js/wpgpt-functions.js",
 				"js/wpgpt-history.js",
