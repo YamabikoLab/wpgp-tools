@@ -187,6 +187,11 @@ Note: Disable custom keyboard shortcuts if you use keyboard `Alt + numbers` to i
 ![anonymous_user](https://user-images.githubusercontent.com/65488419/127504757-2547f47b-d8fb-47f7-b362-47eb6037597b.gif)
 
 
+
+## My suggestion label (YamabikoLab)
+
+Waiting translations authored by the signed-in WordPress.org account receive a small **My suggestion** label in the translation list. The feature reads the existing matching GlotPress editor row's **Translated by** profile link and the account link in the WordPress admin-bar account menu. It does not add requests, change permissions, or mark other translators' suggestions. If either account cannot be identified from a WordPress.org profile URL, no label is shown. Verify availability of those links on your signed-in translation page; the feature intentionally avoids guessing.
+
 ## Installation
 
 ### Chrome

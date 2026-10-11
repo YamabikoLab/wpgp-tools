@@ -839,3 +839,15 @@ button.choose-consistency-string {
         display: none;
     }
 }
+/* Label for the signed-in translator's Waiting suggestions. */
+.wpgpt-my-suggestion {
+    display: inline-block;
+    margin: 5px 0 0 0;
+    padding: 1px 6px;
+    border: 1px solid #577d92;
+    border-radius: 2px;
+    color: #184963;
+    background: #e9f5fa;
+    font-size: 12px;
+    font-weight: 600;
+}
