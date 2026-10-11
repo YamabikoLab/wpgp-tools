@@ -37,16 +37,16 @@ function fixture( { user = 'alice', author = 'alice', status = 'waiting', editor
 		querySelectorAll: () => author ? [ link( 'https://profiles.wordpress.org/' + author + '/' ) ] : [],
 	};
 	const editor = {
-		classList: { contains: ( value ) => value === editorStatus },
+		classList: { contains: ( value ) => value === 'status-' + editorStatus },
 		querySelectorAll: () => [ field ],
 	};
 	const preview = {
 		id: 'preview-123',
-		classList: { contains: ( value ) => value === status },
+		classList: { contains: ( value ) => value === 'status-' + status },
 		querySelector: () => cell,
 	};
 	const menu = user ? {
-		querySelectorAll: () => [ link( 'https://profiles.wordpress.org/' + user + '/' ) ],
+		querySelectorAll: () => [ link( 'https://profiles.wordpress.org/' + user + '/profile/edit/' ) ],
 	} : null;
 	const document = {
 		readyState: 'loading',
@@ -66,6 +66,33 @@ test( 'profile URLs require a single WordPress.org account slug', () => {
 	assert.equal( ctx.wpgpt_my_suggestion_profile( 'https://profiles.wordpress.org/Alice/' ), 'alice' );
 	assert.equal( ctx.wpgpt_my_suggestion_profile( 'https://evil.example/alice/' ), null );
 	assert.equal( ctx.wpgpt_my_suggestion_profile( 'https://profiles.wordpress.org/alice/activity/' ), null );
+});
+
+test( 'profile edit URLs identify only the signed-in user, never a translation author', () => {
+	const f = fixture();
+	const ctx = load( f.document );
+	assert.equal( ctx.wpgpt_my_suggestion_profile( 'https://profiles.wordpress.org/alice/profile/edit/' ), null );
+	assert.equal( ctx.wpgpt_my_suggestion_current_user(), 'alice' );
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 1 );
+	f.field.querySelectorAll = () => [ link( 'https://profiles.wordpress.org/alice/profile/edit/' ) ];
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 0 );
+});
+
+test( 'account menu rejects unrelated or malformed edit links', () => {
+	const f = fixture();
+	const ctx = load( f.document );
+	const menu = f.document.querySelector( '#wp-admin-bar-my-account' );
+	for ( const url of [
+		'https://profiles.wordpress.org/alice/profile/view/',
+		'https://profiles.wordpress.org/alice/profile/edit/extra/',
+		'https://evil.example/alice/profile/edit/',
+		'http://profiles.wordpress.org/alice/profile/edit/',
+	] ) {
+		menu.querySelectorAll = () => [ link( url ) ];
+		assert.equal( ctx.wpgpt_my_suggestion_current_user(), null, url );
+	}
 });
 
 test( 'only own Waiting row is marked and repeated scans do not duplicate labels', () => {
@@ -93,7 +120,7 @@ test( 'a matching row that changes status or author loses its old label', () => 
 	f.preview.classList.contains = () => false;
 	ctx.wpgpt_my_suggestion_sync();
 	assert.equal( f.labels.length, 0 );
-	f.preview.classList.contains = ( value ) => 'waiting' === value;
+	f.preview.classList.contains = ( value ) => 'status-waiting' === value;
 	f.field.querySelectorAll = () => [ link( 'https://profiles.wordpress.org/bob/' ) ];
 	ctx.wpgpt_my_suggestion_sync();
 	assert.equal( f.labels.length, 0 );
@@ -147,8 +174,8 @@ test( 'unrelated menu links are ignored and repeated identical identities remain
 	const menu = f.document.querySelector( '#wp-admin-bar-my-account' );
 	menu.querySelectorAll = () => [
 		link( 'https://translate.wordpress.org/' ),
-		link( 'https://profiles.wordpress.org/Alice/' ),
-		link( 'https://profiles.wordpress.org/alice/' ),
+		link( 'https://profiles.wordpress.org/Alice/profile/edit/' ),
+		link( 'https://profiles.wordpress.org/alice/profile/edit/' ),
 	];
 	ctx.wpgpt_my_suggestion_sync();
 	assert.equal( f.labels.length, 1 );
