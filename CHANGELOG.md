@@ -1,3 +1,9 @@
+# Unreleased
+
+- Add My Waiting as an all-page Warning scan scope using one filtered GlotPress PO export
+- Require an explicit WordPress.org login name and identify the selected scan scope
+- Document PO limitations for multiple Waiting proposals sharing an original and context
+
 # 2.3.0
 11.10.2026
 
