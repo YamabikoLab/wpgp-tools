@@ -125,3 +125,132 @@ test( 'ambiguous signed-in profile and multiple author links are not trusted', (
 	ctx.wpgpt_my_suggestion_sync();
 	assert.equal( f.labels.length, 0 );
 });
+
+test( 'profile identity rejects malformed, insecure, and non-account destinations', () => {
+	const ctx = load( fixture().document );
+	for ( const href of [
+		'http://profiles.wordpress.org/alice/',
+		'https://profiles.wordpress.org.evil.example/alice/',
+		'https://profiles.wordpress.org/',
+		'https://profiles.wordpress.org/alice%2Fbob/',
+		'https://profiles.wordpress.org/alice/bob/',
+		'not a valid URL',
+	] ) {
+		assert.equal( ctx.wpgpt_my_suggestion_profile( href ), null, href );
+	}
+	assert.equal( ctx.wpgpt_my_suggestion_profile( 'https://profiles.wordpress.org/ALICE/?tab=activity' ), 'alice' );
+});
+
+test( 'unrelated menu links are ignored and repeated identical identities remain valid', () => {
+	const f = fixture();
+	const ctx = load( f.document );
+	const menu = f.document.querySelector( '#wp-admin-bar-my-account' );
+	menu.querySelectorAll = () => [
+		link( 'https://translate.wordpress.org/' ),
+		link( 'https://profiles.wordpress.org/Alice/' ),
+		link( 'https://profiles.wordpress.org/alice/' ),
+	];
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 1 );
+});
+
+test( 'author metadata must have exactly one Translated by field with one valid profile', () => {
+	const f = fixture();
+	const ctx = load( f.document );
+	const authorField = f.field;
+	const unrelatedField = {
+		querySelector: () => ( { textContent: 'Approved by:' } ),
+		querySelectorAll: () => [ link( 'https://profiles.wordpress.org/alice/' ) ],
+	};
+	f.editor.querySelectorAll = () => [ unrelatedField, authorField ];
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 1 );
+
+	f.editor.querySelectorAll = () => [ unrelatedField ];
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 0 );
+
+	f.editor.querySelectorAll = () => [ authorField, authorField ];
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 0 );
+
+	f.editor.querySelectorAll = () => [ authorField ];
+	authorField.querySelectorAll = () => [ link( 'https://evil.example/alice/' ) ];
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 0 );
+});
+
+test( 'duplicate labels are reduced to one and all removed after identity becomes unavailable', () => {
+	const f = fixture();
+	const ctx = load( f.document );
+	ctx.wpgpt_my_suggestion_sync();
+	f.cell.appendChild( { className: 'wpgpt-my-suggestion' } );
+	f.cell.appendChild( { className: 'wpgpt-my-suggestion' } );
+	assert.equal( f.labels.length, 3 );
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 1 );
+	f.document.querySelector = () => null;
+	ctx.wpgpt_my_suggestion_sync();
+	assert.equal( f.labels.length, 0 );
+});
+
+test( 'each translation row is evaluated independently, including rows with no translation cell', () => {
+	const own = fixture();
+	const other = fixture( { author: 'bob' } );
+	other.preview.id = 'preview-456';
+	const missing = fixture();
+	missing.preview.id = 'preview-789';
+	missing.preview.querySelector = () => null;
+	own.document.querySelectorAll = () => [ own.preview, other.preview, missing.preview ];
+	own.document.getElementById = ( id ) => {
+		if ( 'editor-123' === id ) return own.editor;
+		if ( 'editor-456' === id ) return other.editor;
+		if ( 'editor-789' === id ) return missing.editor;
+		return null;
+	};
+	load( own.document ).wpgpt_my_suggestion_sync();
+	assert.equal( own.labels.length, 1 );
+	assert.equal( other.labels.length, 0 );
+	assert.equal( missing.labels.length, 0 );
+});
+
+test( 'initialization does nothing without a translation table', () => {
+	const f = fixture();
+	let observed = 0;
+	f.document.querySelector = () => null;
+	const ctx = load( f.document );
+	ctx.MutationObserver = class {
+		observe() { observed++; }
+	};
+	ctx.wpgpt_my_suggestion_init();
+	assert.equal( observed, 0 );
+	assert.equal( f.labels.length, 0 );
+});
+
+test( 'the observer coalesces changes and updates labels after a status change', async () => {
+	const f = fixture();
+	f.document.querySelector = ( selector ) => {
+		if ( 'table.translations' === selector ) return {};
+		if ( '#wp-admin-bar-my-account' === selector ) {
+			return { querySelectorAll: () => [ link( 'https://profiles.wordpress.org/alice/' ) ] };
+		}
+		return null;
+	};
+	const ctx = load( f.document );
+	let notify;
+	let observed;
+	ctx.MutationObserver = class {
+		constructor( callback ) { notify = callback; }
+		observe( target, options ) { observed = { target, options }; }
+	};
+	f.document.body = {};
+	ctx.wpgpt_my_suggestion_init();
+	assert.equal( f.labels.length, 1 );
+	assert.equal( observed.target, f.document.body );
+	assert.deepEqual( Array.from( observed.options.attributeFilter ), [ 'class', 'href' ] );
+	f.preview.classList.contains = () => false;
+	notify();
+	notify();
+	await Promise.resolve();
+	assert.equal( f.labels.length, 0 );
+});
