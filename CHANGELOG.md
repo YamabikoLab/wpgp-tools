@@ -1,12 +1,9 @@
-# Unreleased
+# 2.3.0
+12.10.2026
 
 - Add My Waiting as an all-page Warning scan scope using one filtered GlotPress PO export
 - Require an explicit WordPress.org login name and identify the selected scan scope
 - Document PO limitations for multiple Waiting proposals sharing an original and context
-
-# 2.3.0
-11.10.2026
-
 - Add a "My suggestion" label to identify your own Waiting translations
 - Match translation authors using WordPress.org profile URLs
 - Automatically update labels when translation rows or statuses change
