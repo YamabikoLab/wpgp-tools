@@ -56,6 +56,16 @@
 	gap: 4px;
 }
 
+.wpgpt-all-page-warnings__selection label {
+	max-width: 100%;
+}
+
+.wpgpt-all-page-warnings__selection input[type="text"] {
+	width: 24rem;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
 .wpgpt-all-page-warnings__selection small {
 	color: #646970;
 }
