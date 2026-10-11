@@ -277,6 +277,51 @@ function wpgpt_all_page_warnings_build_export_url( pageDocument = document, base
 }
 
 /**
+ * 指定した WordPress.org ログイン名に属する Waiting の PO 出力先を構築する。
+ *
+ * 現在の画面の検索条件は対象外とし、同一翻訳セットの Waiting と指定ログイン名だけを取得対象にする。
+ * ログイン名の入力だけで本人確認が成立したとはみなさない。
+ *
+ * @param {string} loginName 利用者が明示入力した WordPress.org のログイン名。
+ * @param {Document|Object} pageDocument 現在の翻訳セットの Export リンクを持つ文書。
+ * @param {string} baseUrl Export リンクの解決に使用する画面 URL。
+ * @returns {string} 指定された Waiting に限定した PO 出力 URL。
+ * @throws {Error} ログイン名が無効、または Export リンクが不正な場合。
+ */
+function wpgpt_all_page_warnings_build_my_waiting_url(
+	loginName,
+	pageDocument = document,
+	baseUrl = window.location.href
+) {
+	const login = loginName.trim();
+	// 入力値はログイン名だけを受け付け、URL・表示名・空欄による誤った対象指定を防止する。
+	if ( ! /^[a-zA-Z0-9_.@-]+$/u.test( login ) ) {
+		throw new Error( 'WordPress.org のログイン名を入力してください（URL や表示名は使用できません）。' );
+	}
+
+	const exportLink = pageDocument.querySelector( 'a#export' );
+	// 翻訳セットを確定できない場合は推測した場所へ通信しない。
+	if ( ! exportLink ) {
+		throw new Error( 'GlotPress の Export リンクを取得できませんでした。' );
+	}
+	const href = exportLink.getAttribute( 'href' ) || exportLink.getAttribute( 'filters' );
+	if ( ! href ) {
+		throw new Error( 'GlotPress の Export URL を取得できませんでした。' );
+	}
+	const url = new URL( href, baseUrl );
+	// 同一サイトの翻訳セットの Export 以外を対象にしない。
+	if ( url.origin !== new URL( baseUrl ).origin || ! /\/export-translations\/?$/u.test( url.pathname ) ) {
+		throw new Error( 'GlotPress の Export URL が不正です。' );
+	}
+	url.hash = '';
+	url.search = '';
+	url.searchParams.set( 'format', 'po' );
+	url.searchParams.set( 'filters[status]', 'waiting' );
+	url.searchParams.set( 'filters[user_login]', login );
+	return url.href;
+}
+
+/**
  * 結果一覧から対象原文を GlotPress で確認するための検索 URL を作成する。
  *
  * @param {string} exportUrl 全件確認に使用した PO 出力 URL。
@@ -977,6 +1022,9 @@ const wpgptAllPageWarningsState = {
 	pageSize: 25,
 	scanning: false,
 	checkedStrings: 0,
+	mode: 'current',
+	loginName: '',
+	resultScope: '',
 	ui: {},
 };
 
@@ -1022,6 +1070,8 @@ function wpgpt_all_page_warnings_set_scanning( scanning ) {
 	wpgptAllPageWarningsState.scanning = scanning;
 	wpgptAllPageWarningsState.ui.scan.disabled = scanning;
 	wpgptAllPageWarningsState.ui.rescan.disabled = scanning;
+	wpgptAllPageWarningsState.ui.mode.disabled = scanning;
+	wpgptAllPageWarningsState.ui.login.disabled = scanning;
 }
 
 /**
@@ -1347,6 +1397,7 @@ function wpgpt_all_page_warnings_render() {
 	wpgptAllPageWarningsState.ui.warningCount.textContent = String( summary.warnings );
 	wpgptAllPageWarningsState.ui.stringCount.textContent = String( summary.strings );
 	wpgptAllPageWarningsState.ui.checkedCount.textContent = String( wpgptAllPageWarningsState.checkedStrings );
+	wpgptAllPageWarningsState.ui.scope.textContent = wpgptAllPageWarningsState.resultScope;
 	wpgptAllPageWarningsState.ui.results.replaceChildren();
 
 	// 現在の絞り込み・ページ条件で表示項目がない場合は、結果カードの代わりに理由を表示する。
@@ -1394,6 +1445,7 @@ function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.searchQuery = '';
 	wpgptAllPageWarningsState.page = 1;
 	wpgptAllPageWarningsState.checkedStrings = 0;
+	wpgptAllPageWarningsState.resultScope = '';
 	wpgptAllPageWarningsState.ui.content.hidden = true;
 	// 検索欄が構築済みの場合だけ表示値も初期化し、再走査時に前回条件を持ち越さない。
 	if ( wpgptAllPageWarningsState.ui.search ) {
@@ -1409,7 +1461,24 @@ function wpgpt_all_page_warnings_reset_results() {
 }
 
 /**
- * 現在の GlotPress 絞り込み条件を対象として全件 Warning 確認を実行する。
+ * 選択した取得対象に対応する PO 出力 URL を作成する。
+ *
+ * @param {string} mode 現在の絞り込み条件または指定ログイン名の Waiting。
+ * @param {string} loginName My Waiting に指定したログイン名。
+ * @param {Document|Object} pageDocument 現在の翻訳セットを表す文書。
+ * @param {string} baseUrl 相対 URL を解決する画面 URL。
+ * @returns {string} 取得対象を確定した PO 出力 URL。
+ */
+function wpgpt_all_page_warnings_export_url_for_mode( mode, loginName, pageDocument = document, baseUrl = window.location.href ) {
+	// My Waiting だけは現在の検索条件を持ち越さず、明示されたログイン名を適用する。
+	if ( 'my-waiting' === mode ) {
+		return wpgpt_all_page_warnings_build_my_waiting_url( loginName, pageDocument, baseUrl );
+	}
+	return wpgpt_all_page_warnings_build_export_url( pageDocument, baseUrl );
+}
+
+/**
+ * 選択した翻訳取得対象について全件 Warning 確認を実行する。
  *
  * 二重実行と未保存訳文がある状態での走査を禁止し、取得・解析・表示の一連の処理中は
  * 操作を無効化する。終了時は成功・失敗にかかわらず操作可能状態へ戻す。
@@ -1436,7 +1505,12 @@ async function wpgpt_all_page_warnings_scan() {
 	wpgpt_all_page_warnings_set_status( '翻訳データを取得しています…' );
 
 	try {
-		const exportUrl = wpgpt_all_page_warnings_build_export_url();
+		const mode = wpgptAllPageWarningsState.mode;
+		const loginName = wpgptAllPageWarningsState.loginName.trim();
+		const exportUrl = wpgpt_all_page_warnings_export_url_for_mode( mode, loginName );
+		const scope = 'my-waiting' === mode ?
+			'指定ログイン名「' + loginName + '」の Waiting（PO に出力された翻訳）' :
+			'現在のフィルター（PO に出力された翻訳）';
 		const po = await wpgpt_all_page_warnings_fetch_po( exportUrl );
 		const entries = wpgpt_all_page_warnings_parse_po( po );
 		wpgpt_all_page_warnings_set_status( entries.length + '件の翻訳データを確認しています…' );
@@ -1444,9 +1518,10 @@ async function wpgpt_all_page_warnings_scan() {
 		const analyzed = wpgpt_all_page_warnings_analyze_entries( entries, exportUrl );
 		wpgptAllPageWarningsState.results = analyzed.results;
 		wpgptAllPageWarningsState.checkedStrings = analyzed.checkedStrings;
+		wpgptAllPageWarningsState.resultScope = scope;
 
 		wpgpt_all_page_warnings_set_status(
-			'✓ ' + wpgptAllPageWarningsState.checkedStrings + '件の翻訳文字列を確認しました。',
+			'✓ ' + scope + ': ' + wpgptAllPageWarningsState.checkedStrings + '件を確認しました。',
 			'success'
 		);
 		wpgpt_all_page_warnings_render_rule_options();
@@ -1478,7 +1553,7 @@ function wpgpt_all_page_warnings_build_ui() {
 		wpgpt_all_page_warnings_create_element(
 			'p',
 			'',
-			'現在の検索・ステータス等を反映した翻訳データを一度だけ取得し、ブラウザー内で Warning を確認します。'
+			'取得対象を選んで PO を1回取得し、ブラウザー内で Warning を確認します。'
 		)
 	);
 	// 日本語チェックを利用する画面だけ、現在の実装が基準とするスタイルガイドの版を明示する。
@@ -1492,6 +1567,50 @@ function wpgpt_all_page_warnings_build_ui() {
 			)
 		);
 	}
+	const selection = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__selection' );
+	const modeLabel = document.createElement( 'label' );
+	modeLabel.textContent = '取得対象 ';
+	const mode = document.createElement( 'select' );
+	mode.setAttribute( 'aria-label', '全件確認の取得対象' );
+	[ [ 'current', '現在のフィルター' ], [ 'my-waiting', 'My Waiting' ] ].forEach( ( [ value, label ] ) => {
+		const option = document.createElement( 'option' );
+		option.value = value;
+		option.textContent = label;
+		mode.appendChild( option );
+	} );
+	modeLabel.appendChild( mode );
+
+	const loginLabel = document.createElement( 'label' );
+	loginLabel.textContent = 'WordPress.org ログイン名 ';
+	loginLabel.hidden = true;
+	const login = document.createElement( 'input' );
+	login.type = 'text';
+	login.autocomplete = 'off';
+	login.spellcheck = false;
+	login.placeholder = 'ログイン名（プロフィール URL ではありません）';
+	login.setAttribute( 'aria-label', 'WordPress.org のログイン名' );
+	loginLabel.appendChild( login );
+	const loginNote = wpgpt_all_page_warnings_create_element(
+		'small',
+		'',
+		'入力したログイン名の Waiting を検索します。本人確認は行いません。名前は保存されません。'
+	);
+	loginLabel.appendChild( loginNote );
+
+	// 取得対象が変わると以前の結果は無効になるため、操作時点で破棄する。
+	mode.addEventListener( 'change', () => {
+		wpgptAllPageWarningsState.mode = mode.value;
+		loginLabel.hidden = 'my-waiting' !== mode.value;
+		wpgpt_all_page_warnings_reset_results();
+		status.hidden = true;
+	} );
+	login.addEventListener( 'input', () => {
+		wpgptAllPageWarningsState.loginName = login.value;
+		wpgpt_all_page_warnings_reset_results();
+		status.hidden = true;
+	} );
+	selection.append( modeLabel, loginLabel );
+	root.appendChild( selection );
 	const scan = wpgpt_all_page_warnings_create_element( 'button', 'button is-primary', 'Scan all warnings' );
 	scan.type = 'button';
 	scan.addEventListener( 'click', wpgpt_all_page_warnings_scan );
@@ -1511,6 +1630,8 @@ function wpgpt_all_page_warnings_build_ui() {
 	);
 	content.appendChild( snapshot );
 
+	const scope = wpgpt_all_page_warnings_create_element( 'p', 'wpgpt-all-page-warnings__scope' );
+	content.appendChild( scope );
 	const metrics = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__metrics' );
 	/**
 	 * 集計値と説明を組み合わせた表示要素を追加する。
@@ -1631,6 +1752,8 @@ function wpgpt_all_page_warnings_build_ui() {
 
 	wpgptAllPageWarningsState.ui = {
 		root,
+		mode,
+		login,
 		scan,
 		rescan,
 		status,
@@ -1638,6 +1761,7 @@ function wpgpt_all_page_warnings_build_ui() {
 		warningCount,
 		stringCount,
 		checkedCount,
+		scope,
 		ruleOptions,
 		search,
 		copyAll,
