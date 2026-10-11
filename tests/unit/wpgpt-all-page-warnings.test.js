@@ -101,6 +101,8 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			slackSingle: wpgpt_all_page_warnings_slack_single,
 			copyText: wpgpt_all_page_warnings_copy_text,
 			buildExportUrl: wpgpt_all_page_warnings_build_export_url,
+			buildMyWaitingUrl: wpgpt_all_page_warnings_build_my_waiting_url,
+			exportUrlForMode: wpgpt_all_page_warnings_export_url_for_mode,
 			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 			isPo: wpgpt_all_page_warnings_is_po,
 			parsePo: wpgpt_all_page_warnings_parse_po,
@@ -518,6 +520,46 @@ describe( 'PO export scanning', () => {
 			url,
 			'https://translate.wordpress.org/projects/example/ja/default/export-translations/?filters%5Bstatus%5D=current&format=po'
 		);
+	} );
+
+	test( 'My Waiting ignores inherited filters and uses one explicit PO export scope', () => {
+		const api = loadAllPageWarnings();
+		const pageDocument = {
+			querySelector() {
+				return {
+					getAttribute( name ) {
+						return 'href' === name ?
+							'/projects/example/ja/default/export-translations/?filters%5Bterm%5D=other&filters%5Bstatus%5D=current&filters%5Buser_login%5D=other' :
+							null;
+					},
+				};
+			},
+		};
+		const url = new URL( api.exportUrlForMode(
+			'my-waiting', 'my.login', pageDocument, 'https://translate.wordpress.org/projects/example/ja/default/'
+		) );
+		assert.equal( url.pathname, '/projects/example/ja/default/export-translations/' );
+		assert.deepEqual( Array.from( url.searchParams.entries() ), [
+			[ 'format', 'po' ],
+			[ 'filters[status]', 'waiting' ],
+			[ 'filters[user_login]', 'my.login' ],
+		] );
+	} );
+
+	test( 'rejects empty, profile URLs, and malformed login names without requesting an export', () => {
+		const api = loadAllPageWarnings();
+		const pageDocument = { querySelector() { throw new Error( 'Should not read export link' ); } };
+		[ '', '   ', 'https://profiles.wordpress.org/name/', 'a b', '日本語' ].forEach( ( value ) => {
+			assert.throws( () => api.buildMyWaitingUrl( value, pageDocument, 'https://translate.wordpress.org/' ), /ログイン名/u );
+		} );
+	} );
+
+	test( 'rejects a cross-origin or unrelated export path', () => {
+		const api = loadAllPageWarnings();
+		[ 'https://example.com/export-translations/', '/other-path/' ].forEach( ( href ) => {
+			const doc = { querySelector() { return { getAttribute( name ) { return 'href' === name ? href : null; } }; } };
+			assert.throws( () => api.buildMyWaitingUrl( 'valid-user', doc, 'https://translate.wordpress.org/' ), /不正/u );
+		} );
 	} );
 
 	test( 'builds a GlotPress original-search URL without the export path', () => {
