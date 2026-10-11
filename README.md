@@ -188,6 +188,14 @@ Note: Disable custom keyboard shortcuts if you use keyboard `Alt + numbers` to i
 
 
 
+## All-page Warning scan: My Waiting (YamabikoLab)
+
+On a GlotPress translation list, choose **My Waiting** under the all-page Warning scan, enter your **WordPress.org login name** (not a profile URL or display name), and click **Scan all warnings**. The default **Current filters** mode retains the existing filtered-export behavior.
+
+My Waiting requests a single PO export for the active translation set with `format=po`, `filters[status]=waiting`, and `filters[user_login]=<login name>`. It deliberately ignores the page's search and filtering parameters. The supplied name is not automatically verified against the signed-in account and is not stored. An empty result means **zero Waiting entries were exported for the specified login**, not proof that your own account has no Waiting proposals.
+
+The scan checks **entries present in the exported PO**, not necessarily every individual suggestion. PO entries are keyed by original string and context, so multiple Waiting proposals for the same original/context may not all survive export. This mode does not make any per-row requests, background requests, or automatic retries. On HTTP 429 or other export errors, the scan reports failure. Unsaved translation edits must be saved before starting.
+
 ## My suggestion label (YamabikoLab)
 
 Waiting translations authored by the signed-in WordPress.org account receive a small **My suggestion** label in the translation list. The feature reads the existing matching GlotPress editor row's **Translated by** profile link and the account link in the WordPress admin-bar account menu. It does not add requests, change permissions, or mark other translators' suggestions. If either account cannot be identified from a WordPress.org profile URL, no label is shown. Verify availability of those links on your signed-in translation page; the feature intentionally avoids guessing.
