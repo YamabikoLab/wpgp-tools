@@ -1587,13 +1587,13 @@ function wpgpt_all_page_warnings_build_ui() {
 	login.type = 'text';
 	login.autocomplete = 'off';
 	login.spellcheck = false;
-	login.placeholder = 'ログイン名（プロフィール URL ではありません）';
+	login.placeholder = 'ログイン名';
 	login.setAttribute( 'aria-label', 'WordPress.org のログイン名' );
 	loginLabel.appendChild( login );
 	const loginNote = wpgpt_all_page_warnings_create_element(
 		'small',
 		'',
-		'入力したログイン名の Waiting を検索します。本人確認は行いません。名前は保存されません。'
+		'プロフィール URL ではなく、WordPress.org のログイン名を入力してください。指定したログイン名の Waiting を検索します。本人確認は行いません。名前は保存されません。'
 	);
 	loginLabel.appendChild( loginNote );
 
