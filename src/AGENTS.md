@@ -2,20 +2,6 @@
 
 These instructions apply to product source under `src/`.
 
-## Source organization
-
-- Add source files only when a concrete product responsibility requires them.
-- Do not create generic `shared/`, `utils/`, or `helpers/` directories without a concrete shared reason for change.
-- Use the WordPress block editor extension point that best matches each concrete responsibility.
-- Do not introduce adapter or abstraction layers solely for hypothetical future integrations.
-
-## WordPress boundaries
-
-- Prefer public WordPress APIs.
-- Choose the most natural extension surface for the feature, such as a RichText format, block, block style, or editor extension.
-- Keep feature logic separate from incidental DOM structure when a supported WordPress API exists.
-- Do not add compatibility layers before a concrete compatibility requirement exists.
-
 ## Source documentation
 
 - Write comments and documentation at a basic-design level of abstraction so that readers who understand the specification but cannot read the implementation can understand the specification, responsibility, purpose, behavior, and rationale. Documentation should remain understandable when read without the implementation beside it.
