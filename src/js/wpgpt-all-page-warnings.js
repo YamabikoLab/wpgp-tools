@@ -304,7 +304,7 @@ function wpgpt_all_page_warnings_build_my_waiting_url(
 	if ( ! exportLink ) {
 		throw new Error( 'GlotPress の Export リンクを取得できませんでした。' );
 	}
-	const href = exportLink.getAttribute( 'href' ) || exportLink.getAttribute( 'filters' );
+	const href = exportLink.getAttribute( 'filters' ) || exportLink.getAttribute( 'href' );
 	if ( ! href ) {
 		throw new Error( 'GlotPress の Export URL を取得できませんでした。' );
 	}
