@@ -26,6 +26,7 @@ function wpgpt_my_suggestion_profile( href ) {
 
 /**
  * ログイン中の利用者を、本人専用の管理メニューから特定する。
+ * 管理メニューに限ってプロフィール編集ページへのリンクも本人の識別根拠として認める。
  * 異なるアカウントが複数見つかった場合は本人を特定できないものとして扱う。
  * @return {?string} 確定した本人のアカウント名、または null。
  */
@@ -38,7 +39,22 @@ function wpgpt_my_suggestion_current_user() {
 	}
 	// 管理メニューにあるプロフィール候補をすべて照合し、有効な本人情報だけを残す。
 	const identities = Array.from( menu.querySelectorAll( 'a[href]' ) )
-		.map( ( link ) => wpgpt_my_suggestion_profile( link.href ) )
+		.map( ( link ) => {
+			const profile = wpgpt_my_suggestion_profile( link.href );
+			if ( profile ) {
+				return profile;
+			}
+			// 本人専用メニューにある編集リンクだけを本人の識別根拠として追加する。
+			try {
+				const url = new URL( link.href, window.location.href );
+				const parts = url.pathname.split( '/' ).filter( Boolean );
+				return 'https:' === url.protocol && 'profiles.wordpress.org' === url.hostname &&
+					3 === parts.length && 'profile' === parts[ 1 ] && 'edit' === parts[ 2 ] &&
+					/^[a-z0-9_.-]+$/iu.test( parts[ 0 ] ) ? parts[ 0 ].toLowerCase() : null;
+			} catch ( error ) {
+				return null;
+			}
+		} )
 		.filter( Boolean );
 	const unique = new Set( identities );
 	return 1 === unique.size ? identities[ 0 ] : null;
@@ -88,8 +104,8 @@ function wpgpt_my_suggestion_sync() {
 		}
 		const existing = cell.querySelectorAll( '.wpgpt-my-suggestion' );
 		// プレビューと対応する編集行の両方が承認待ちである場合だけ、投稿者の照合に進む。
-		const author = preview.classList.contains( 'waiting' ) &&
-			editor && editor.classList.contains( 'waiting' ) ?
+		const author = preview.classList.contains( 'status-waiting' ) &&
+			editor && editor.classList.contains( 'status-waiting' ) ?
 			wpgpt_my_suggestion_author( editor ) : null;
 		const show = Boolean( user && author && user === author );
 		// 本人と確定しない翻訳には印を残さず、以前の判定結果も破棄する。
