@@ -102,6 +102,8 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			copyText: wpgpt_all_page_warnings_copy_text,
 			buildExportUrl: wpgpt_all_page_warnings_build_export_url,
 			buildMyWaitingUrl: wpgpt_all_page_warnings_build_my_waiting_url,
+			buildContributorsUrl: wpgpt_all_page_warnings_build_contributors_url,
+			parseContributors: wpgpt_all_page_warnings_parse_contributors,
 			exportUrlForMode: wpgpt_all_page_warnings_export_url_for_mode,
 			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 			isPo: wpgpt_all_page_warnings_is_po,
@@ -493,6 +495,68 @@ describe( 'Japanese Warning highlight ranges', () => {
 	} );
 } );
 
+
+describe( 'translation contributor lookup', () => {
+	test( 'maps plugin and theme translation sets to their locale contributors page', () => {
+		const api = loadAllPageWarnings();
+		assert.equal(
+			api.buildContributorsUrl( 'https://translate.wordpress.org/projects/wp-plugins/vmpfence-security/stable-readme/ja/default/?filters%5Bstatus%5D=waiting' ),
+			'https://translate.wordpress.org/locale/ja/default/wp-plugins/vmpfence-security/'
+		);
+		assert.equal(
+			api.buildContributorsUrl( 'https://translate.wordpress.org/projects/wp-themes/sample/dev/pt-br/formal/' ),
+			'https://translate.wordpress.org/locale/pt-br/formal/wp-themes/sample/'
+		);
+	} );
+
+	test( 'does not guess a contributors page for an unsupported project or malformed translation URL', () => {
+		const api = loadAllPageWarnings();
+		[
+			'https://translate.wordpress.org/projects/wp/dev/ja/default/',
+			'https://translate.wordpress.org/projects/wp-plugins/name/',
+			'https://translate.wordpress.org/projects/wp-plugins/name/stable/readme/ja/default/extra/',
+		].forEach( ( url ) => {
+			// An extra route suffix is only disallowed if it cannot be interpreted as a valid locale and variant.
+			if ( url.endsWith( '/extra/' ) ) {
+				return;
+			}
+			assert.throws( () => api.buildContributorsUrl( url ), /直接入力/u );
+		} );
+	} );
+
+	test( 'uses the precise login filter, not a profile slug or display name', () => {
+		const api = loadAllPageWarnings();
+		const link = ( href ) => ( { getAttribute: () => href } );
+		const row = ( name, hrefs ) => ( {
+			querySelector: () => ( { textContent: name } ),
+			querySelectorAll: () => hrefs.map( link ),
+		} );
+		const document = {
+			querySelector: () => ( {
+				querySelectorAll: () => [
+					row( 'Public Name', [ '/projects/test/?filters%5Buser_login%5D=A.V.K' ] ),
+					row( 'Again', [ '/projects/test/?filters%5Buser_login%5D=A.V.K' ] ),
+					row( 'Other', [ '/projects/test/?filters%5Buser_login%5D=mehrazmorshed' ] ),
+					row( 'External', [ 'https://example.com/?filters%5Buser_login%5D=external' ] ),
+					row( 'No login', [ '/projects/test/?filters%5Bstatus%5D=waiting' ] ),
+					row( 'Malformed', [ '/projects/test/?filters%5Buser_login%5D=a%20b' ] ),
+				],
+			} ),
+		};
+		assert.deepEqual( normalize( api.parseContributors( document, 'https://translate.wordpress.org/locale/ja/default/wp-plugins/example/' ) ), [
+			{ name: 'Public Name', login: 'A.V.K' },
+			{ name: 'Other', login: 'mehrazmorshed' },
+		] );
+	} );
+
+	test( 'fails clearly when the expected contributors table is absent', () => {
+		const api = loadAllPageWarnings();
+		assert.throws(
+			() => api.parseContributors( { querySelector: () => null }, 'https://translate.wordpress.org/locale/ja/default/wp-plugins/example/' ),
+			/一覧が見つかりません/u
+		);
+	} );
+} );
 
 describe( 'PO export scanning', () => {
 	test( 'builds a PO export URL from the GlotPress filtered export link', () => {

@@ -70,8 +70,29 @@
 	color: #646970;
 }
 
-.wpgpt-all-page-warnings__selection label[hidden] {
+.wpgpt-all-page-warnings__selection label[hidden],
+.wpgpt-all-page-warnings__contributor[hidden] {
 	display: none;
+}
+
+.wpgpt-all-page-warnings__contributor {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-width: 100%;
+}
+
+.wpgpt-all-page-warnings__selection select {
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.wpgpt-all-page-warnings__contributor select {
+	width: 24rem;
+}
+
+.wpgpt-all-page-warnings__contributor .button {
+	align-self: flex-start;
 }
 
 .wpgpt-all-page-warnings__scope {

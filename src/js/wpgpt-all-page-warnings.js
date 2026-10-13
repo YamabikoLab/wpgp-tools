@@ -282,7 +282,7 @@ function wpgpt_all_page_warnings_build_export_url( pageDocument = document, base
  * 現在の画面の検索条件は対象外とし、同一翻訳セットの Waiting と指定ログイン名だけを取得対象にする。
  * ログイン名の入力だけで本人確認が成立したとはみなさない。
  *
- * @param {string} loginName 利用者が明示入力した WordPress.org のログイン名。
+ * @param {string} loginName 利用者が選択または明示入力した WordPress.org のログイン名。
  * @param {Document|Object} pageDocument 現在の翻訳セットの Export リンクを持つ文書。
  * @param {string} baseUrl Export リンクの解決に使用する画面 URL。
  * @returns {string} 指定された Waiting に限定した PO 出力 URL。
@@ -319,6 +319,105 @@ function wpgpt_all_page_warnings_build_my_waiting_url(
 	url.searchParams.set( 'filters[status]', 'waiting' );
 	url.searchParams.set( 'filters[user_login]', login );
 	return url.href;
+}
+
+/**
+ * 対象翻訳セットの言語とプラグイン・テーマの所属先に対応する翻訳貢献者ページを特定する。
+ *
+ * 翻訳文字列一覧を巡回せず、公開されている貢献者一覧を1ページだけ参照する。
+ * URL 構造を確認できないプロジェクトでは推測せず、ログイン名の直接入力に委ねる。
+ *
+ * @param {string} pageUrl 現在表示している翻訳セットの URL。
+ * @returns {string} 翻訳貢献者一覧の同一サイト内 URL。
+ * @throws {Error} 対応する翻訳貢献者ページを確定できない場合。
+ */
+function wpgpt_all_page_warnings_build_contributors_url( pageUrl = window.location.href ) {
+	const url = new URL( pageUrl );
+	const parts = url.pathname.split( '/' ).filter( Boolean );
+	// 所属先と翻訳セットの言語を確定できる WordPress プラグイン・テーマだけを自動取得の対象とする。
+	if (
+		'projects' !== parts[ 0 ] ||
+		! [ 'wp-plugins', 'wp-themes' ].includes( parts[ 1 ] ) ||
+		parts.length < 5 ||
+		! /^[a-z0-9_.-]+$/iu.test( parts[ 2 ] ) ||
+		! /^[a-z0-9_-]+$/iu.test( parts[ parts.length - 2 ] ) ||
+		! /^[a-z0-9_-]+$/iu.test( parts[ parts.length - 1 ] )
+	) {
+		throw new Error( 'この翻訳セットの翻訳貢献者一覧は特定できません。ログイン名を直接入力してください。' );
+	}
+	const locale = parts[ parts.length - 2 ];
+	const variant = parts[ parts.length - 1 ];
+	return new URL(
+		'/locale/' + locale + '/' + variant + '/' + parts[ 1 ] + '/' + parts[ 2 ] + '/',
+		url.origin
+	).href;
+}
+
+/**
+ * 翻訳貢献者ページから、翻訳者ごとの正確な WordPress.org ログイン名を取得する。
+ *
+ * プロフィール URL のユーザー名は採用せず、GlotPress の翻訳件数リンクが持つ
+ * filters[user_login] だけを信頼する。見つからない行・不正なリンクは候補にしない。
+ *
+ * @param {Document|Object} pageDocument 翻訳貢献者一覧を含む HTML 文書。
+ * @param {string} pageUrl 相対リンクの解決と同一サイト判定に使う一覧 URL。
+ * @returns {{name: string, login: string}[]} 重複を除いた翻訳者候補。
+ * @throws {Error} 翻訳貢献者一覧の表が存在しない場合。
+ */
+function wpgpt_all_page_warnings_parse_contributors( pageDocument, pageUrl ) {
+	const table = pageDocument.querySelector( '.locale-project-contributors-table' );
+	// ページ構成が変更された場合は別の表を誤って読み取らず、手入力へ切り替えられるようにする。
+	if ( ! table ) {
+		throw new Error( '翻訳貢献者一覧が見つかりませんでした。ログイン名を直接入力してください。' );
+	}
+	const origin = new URL( pageUrl ).origin;
+	const users = [];
+	const seen = new Set();
+	// 各貢献者行について、GlotPress が検索条件として公開した正確なログイン名だけを選択肢に採用する。
+	Array.from( table.querySelectorAll( 'tbody tr' ) ).forEach( ( row ) => {
+		const links = Array.from( row.querySelectorAll( 'a[href]' ) );
+		const filteredLink = links.find( ( link ) => {
+			try {
+				const url = new URL( link.getAttribute( 'href' ), pageUrl );
+				return url.origin === origin && url.searchParams.has( 'filters[user_login]' );
+			} catch ( error ) {
+				return false;
+			}
+		} );
+		// 投稿者の識別子が確認できない行をプロフィール URL から補完しない。
+		if ( ! filteredLink ) {
+			return;
+		}
+		const login = new URL( filteredLink.getAttribute( 'href' ), pageUrl )
+			.searchParams.get( 'filters[user_login]' );
+		// 同じ翻訳者が複数行に載っていても1候補とし、ログイン名以外の値を渡さない。
+		if ( ! login || ! /^[a-zA-Z0-9_.@-]+$/u.test( login ) || seen.has( login ) ) {
+			return;
+		}
+		seen.add( login );
+		const profile = row.querySelector( 'a[href*="profiles.wordpress.org/"]' );
+		users.push( { name: profile?.textContent.trim() || login, login } );
+	} );
+	return users;
+}
+
+/**
+ * 利用者の明示操作時だけ翻訳貢献者ページを1回取得する。
+ *
+ * 自動再試行やページ巡回は行わない。通信失敗・画面構成変更は選択肢の取得失敗として通知する。
+ *
+ * @param {string} url 同一サイトの翻訳貢献者一覧 URL。
+ * @returns {Promise<{name: string, login: string}[]>} 取得できた翻訳者候補。
+ * @throws {Error} 通信に失敗した場合、または一覧が取得できない場合。
+ */
+async function wpgpt_all_page_warnings_fetch_contributors( url ) {
+	const response = await fetch( url, { credentials: 'same-origin' } );
+	if ( ! response.ok ) {
+		throw new Error( 'HTTP ' + response.status + ' while loading contributors.' );
+	}
+	const html = await response.text();
+	const pageDocument = new DOMParser().parseFromString( html, 'text/html' );
+	return wpgpt_all_page_warnings_parse_contributors( pageDocument, url );
 }
 
 /**
@@ -1024,6 +1123,7 @@ const wpgptAllPageWarningsState = {
 	checkedStrings: 0,
 	mode: 'current',
 	loginName: '',
+	loadingContributors: false,
 	resultScope: '',
 	ui: {},
 };
@@ -1068,10 +1168,16 @@ function wpgpt_all_page_warnings_set_status( text, state = '' ) {
  */
 function wpgpt_all_page_warnings_set_scanning( scanning ) {
 	wpgptAllPageWarningsState.scanning = scanning;
-	wpgptAllPageWarningsState.ui.scan.disabled = scanning;
-	wpgptAllPageWarningsState.ui.rescan.disabled = scanning;
-	wpgptAllPageWarningsState.ui.mode.disabled = scanning;
-	wpgptAllPageWarningsState.ui.login.disabled = scanning;
+	const busy = scanning || wpgptAllPageWarningsState.loadingContributors;
+	// 翻訳データ取得と候補一覧取得を並行させず、走査対象の途中変更を防ぐ。
+	[
+		wpgptAllPageWarningsState.ui.scan,
+		wpgptAllPageWarningsState.ui.rescan,
+		wpgptAllPageWarningsState.ui.mode,
+		wpgptAllPageWarningsState.ui.login,
+		wpgptAllPageWarningsState.ui.contributor,
+		wpgptAllPageWarningsState.ui.loadContributors,
+	].forEach( ( element ) => { element.disabled = busy; } );
 }
 
 /**
@@ -1478,6 +1584,60 @@ function wpgpt_all_page_warnings_export_url_for_mode( mode, loginName, pageDocum
 }
 
 /**
+ * 明示操作時だけ翻訳貢献者を取得し、選択候補に反映する。
+ *
+ * 候補取得が失敗しても直接入力を維持し、既存の選択や走査結果を破壊しない。
+ * PO の取得とは独立させ、一覧の取得だけで全件 Warning 確認を開始しない。
+ *
+ * @returns {Promise<void>}
+ */
+async function wpgpt_all_page_warnings_load_contributors() {
+	const state = wpgptAllPageWarningsState;
+	// 全件確認と候補一覧の取得は同時に実行しない。
+	if ( state.scanning || state.loadingContributors ) {
+		return;
+	}
+	state.loadingContributors = true;
+	wpgpt_all_page_warnings_set_scanning( state.scanning );
+	const ui = state.ui;
+	ui.contributorStatus.textContent = '翻訳貢献者一覧を取得しています…';
+	try {
+		const url = wpgpt_all_page_warnings_build_contributors_url();
+		const users = await wpgpt_all_page_warnings_fetch_contributors( url );
+		const previous = ui.contributor.value;
+		ui.contributor.replaceChildren();
+		const manual = document.createElement( 'option' );
+		manual.value = '';
+		manual.textContent = 'ログイン名を直接入力';
+		ui.contributor.appendChild( manual );
+		// 各候補の表示名と実際のログイン名を併記し、選択時の対象を明確にする。
+		users.forEach( ( user ) => {
+			const option = document.createElement( 'option' );
+			option.value = user.login;
+			option.textContent = user.name === user.login ? user.login : user.name + ' (' + user.login + ')';
+			ui.contributor.appendChild( option );
+		} );
+		// 再取得しても残っている選択は維持し、候補から消えた場合は安全な手入力へ戻す。
+		ui.contributor.value = users.some( ( user ) => user.login === previous ) ? previous : '';
+		if ( previous && ! ui.contributor.value ) {
+			state.loginName = ui.login.value;
+			wpgpt_all_page_warnings_reset_results();
+			ui.status.hidden = true;
+		}
+		ui.loginLabel.hidden = '' !== ui.contributor.value;
+		ui.contributorStatus.textContent = users.length ?
+			users.length + '名を取得しました。候補にいない場合は直接入力してください。' :
+			'候補を取得できませんでした。ログイン名を直接入力してください。';
+	} catch ( error ) {
+		// 取得失敗は既存の候補や手入力を使えなくする理由にはしない。
+		ui.contributorStatus.textContent = '翻訳者一覧の取得に失敗しました。' + error.message;
+	} finally {
+		state.loadingContributors = false;
+		wpgpt_all_page_warnings_set_scanning( state.scanning );
+	}
+}
+
+/**
  * 選択した翻訳取得対象について全件 Warning 確認を実行する。
  *
  * 二重実行と未保存訳文がある状態での走査を禁止し、取得・解析・表示の一連の処理中は
@@ -1572,13 +1732,36 @@ function wpgpt_all_page_warnings_build_ui() {
 	modeLabel.textContent = '取得対象 ';
 	const mode = document.createElement( 'select' );
 	mode.setAttribute( 'aria-label', '全件確認の取得対象' );
-	[ [ 'current', '現在のフィルター' ], [ 'my-waiting', 'My Waiting' ] ].forEach( ( [ value, label ] ) => {
+	[ [ 'current', '現在のフィルター' ], [ 'my-waiting', 'ユーザー別 Waiting' ] ].forEach( ( [ value, label ] ) => {
 		const option = document.createElement( 'option' );
 		option.value = value;
 		option.textContent = label;
 		mode.appendChild( option );
 	} );
 	modeLabel.appendChild( mode );
+
+	const contributorSection = wpgpt_all_page_warnings_create_element(
+		'div', 'wpgpt-all-page-warnings__contributor'
+	);
+	contributorSection.hidden = true;
+	const contributorLabel = document.createElement( 'label' );
+	contributorLabel.textContent = '翻訳者 ';
+	const contributor = document.createElement( 'select' );
+	contributor.setAttribute( 'aria-label', 'Waiting を確認する翻訳者' );
+	const manual = document.createElement( 'option' );
+	manual.value = '';
+	manual.textContent = 'ログイン名を直接入力';
+	contributor.appendChild( manual );
+	contributorLabel.appendChild( contributor );
+	const loadContributors = wpgpt_all_page_warnings_create_element(
+		'button', 'button', '翻訳者一覧を取得'
+	);
+	loadContributors.type = 'button';
+	loadContributors.addEventListener( 'click', wpgpt_all_page_warnings_load_contributors );
+	const contributorStatus = wpgpt_all_page_warnings_create_element(
+		'small', '', '候補は取得ボタンを押したときだけ読み込みます。'
+	);
+	contributorSection.append( contributorLabel, loadContributors, contributorStatus );
 
 	const loginLabel = document.createElement( 'label' );
 	loginLabel.textContent = 'WordPress.org ログイン名 ';
@@ -1597,10 +1780,19 @@ function wpgpt_all_page_warnings_build_ui() {
 	);
 	loginLabel.appendChild( loginNote );
 
-	// 取得対象が変わると以前の結果は無効になるため、操作時点で破棄する。
+	// 取得対象やログイン名が変わると以前の走査結果は無効になるため、操作時点で破棄する。
 	mode.addEventListener( 'change', () => {
 		wpgptAllPageWarningsState.mode = mode.value;
-		loginLabel.hidden = 'my-waiting' !== mode.value;
+		const byUser = 'my-waiting' === mode.value;
+		contributorSection.hidden = ! byUser;
+		loginLabel.hidden = ! byUser || '' !== contributor.value;
+		wpgpt_all_page_warnings_reset_results();
+		status.hidden = true;
+	} );
+	contributor.addEventListener( 'change', () => {
+		// 候補のログイン名はリンクのフィルター値を利用し、手入力時だけ入力欄の値を使用する。
+		wpgptAllPageWarningsState.loginName = contributor.value || login.value;
+		loginLabel.hidden = '' !== contributor.value;
 		wpgpt_all_page_warnings_reset_results();
 		status.hidden = true;
 	} );
@@ -1609,7 +1801,7 @@ function wpgpt_all_page_warnings_build_ui() {
 		wpgpt_all_page_warnings_reset_results();
 		status.hidden = true;
 	} );
-	selection.append( modeLabel, loginLabel );
+	selection.append( modeLabel, contributorSection, loginLabel );
 	root.appendChild( selection );
 	const scan = wpgpt_all_page_warnings_create_element( 'button', 'button is-primary', 'Scan all warnings' );
 	scan.type = 'button';
@@ -1754,6 +1946,10 @@ function wpgpt_all_page_warnings_build_ui() {
 		root,
 		mode,
 		login,
+		loginLabel,
+		contributor,
+		loadContributors,
+		contributorStatus,
 		scan,
 		rescan,
 		status,

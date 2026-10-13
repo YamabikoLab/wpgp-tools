@@ -2,7 +2,8 @@
 12.10.2026
 
 - Add My Waiting as an all-page Warning scan scope using one filtered GlotPress PO export
-- Require an explicit WordPress.org login name and identify the selected scan scope
+- Add an optional contributor drop-down based on exact GlotPress user_login links, with manual login fallback
+- Load contributors on demand using one same-origin request; keep the single-PO-export scan
 - Document PO limitations for multiple Waiting proposals sharing an original and context
 - Add a "My suggestion" label to identify your own Waiting translations
 - Match translation authors using WordPress.org profile URLs
