@@ -338,7 +338,7 @@ function wpgpt_all_page_warnings_build_contributors_url( pageUrl = window.locati
 	if (
 		'projects' !== parts[ 0 ] ||
 		! [ 'wp-plugins', 'wp-themes' ].includes( parts[ 1 ] ) ||
-		parts.length < 5 ||
+		parts.length !== 6 ||
 		! /^[a-z0-9_.-]+$/iu.test( parts[ 2 ] ) ||
 		! /^[a-z0-9_-]+$/iu.test( parts[ parts.length - 2 ] ) ||
 		! /^[a-z0-9_-]+$/iu.test( parts[ parts.length - 1 ] )

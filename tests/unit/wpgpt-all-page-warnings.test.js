@@ -516,10 +516,6 @@ describe( 'translation contributor lookup', () => {
 			'https://translate.wordpress.org/projects/wp-plugins/name/',
 			'https://translate.wordpress.org/projects/wp-plugins/name/stable/readme/ja/default/extra/',
 		].forEach( ( url ) => {
-			// An extra route suffix is only disallowed if it cannot be interpreted as a valid locale and variant.
-			if ( url.endsWith( '/extra/' ) ) {
-				return;
-			}
 			assert.throws( () => api.buildContributorsUrl( url ), /直接入力/u );
 		} );
 	} );
