@@ -496,6 +496,99 @@ describe( 'Japanese Warning highlight ranges', () => {
 } );
 
 
+describe( 'automatic contributor loading', () => {
+	test( 'does not request outside user mode and avoids retrying a failed lookup', async () => {
+		const source = fs.readFileSync(
+			path.resolve( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( { URL } );
+		vm.runInContext( source, context );
+		const state = vm.runInContext( 'wpgptAllPageWarningsState', context );
+		const load = vm.runInContext( 'wpgpt_all_page_warnings_load_contributors', context );
+		const firstOption = { value: '', textContent: 'ログイン名を直接入力' };
+		state.ui = {
+			scan: {}, rescan: {}, mode: {}, login: {},
+			contributor: { firstElementChild: firstOption },
+			contributorStatus: { textContent: '' },
+		};
+		context.window = {
+			location: {
+				href: 'https://translate.wordpress.org/projects/wp-plugins/example/stable/ja/default/',
+			},
+		};
+		let requests = 0;
+		context.fetch = async () => {
+			requests++;
+			return { ok: false, status: 429 };
+		};
+
+		await load();
+		assert.equal( requests, 0 );
+		state.mode = 'my-waiting';
+		await Promise.all( [ load(), load() ] );
+		assert.equal( requests, 1 );
+		assert.equal( state.contributorsAttempted, true );
+		assert.equal( state.loadingContributors, false );
+		assert.equal( state.ui.contributor.disabled, false );
+		assert.equal( firstOption.textContent, 'ログイン名を直接入力' );
+		assert.match( state.ui.contributorStatus.textContent, /429/u );
+		await load();
+		assert.equal( requests, 1 );
+	} );
+
+	test( 'populates choices once and keeps manual input available', async () => {
+		const source = fs.readFileSync(
+			path.resolve( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( { URL } );
+		vm.runInContext( source, context );
+		const state = vm.runInContext( 'wpgptAllPageWarningsState', context );
+		const load = vm.runInContext( 'wpgpt_all_page_warnings_load_contributors', context );
+		const contributor = {
+			options: [ { value: '', textContent: 'ログイン名を直接入力' } ],
+			get firstElementChild() { return this.options[ 0 ]; },
+			replaceChildren() { this.options = []; },
+			appendChild( option ) { this.options.push( option ); },
+		};
+		state.mode = 'my-waiting';
+		state.ui = {
+			scan: {}, rescan: {}, mode: {}, login: {},
+			contributor,
+			contributorStatus: { textContent: '' },
+		};
+		context.window = {
+			location: {
+				href: 'https://translate.wordpress.org/projects/wp-plugins/example/stable/ja/default/',
+			},
+		};
+		context.document = { createElement: () => ( { value: '', textContent: '' } ) };
+		const link = { getAttribute: () => '/projects/example/?filters%5Buser_login%5D=exact.login' };
+		context.DOMParser = class {
+			parseFromString() {
+				return { querySelector: () => ( {
+					querySelectorAll: () => [ {
+						querySelectorAll: () => [ link ],
+						querySelector: () => ( { textContent: 'Display Name' } ),
+					} ],
+				} ) };
+			}
+		};
+		let requests = 0;
+		context.fetch = async () => {
+			requests++;
+			return { ok: true, text: async () => '<html></html>' };
+		};
+
+		await load();
+		assert.equal( requests, 1 );
+		assert.deepEqual( contributor.options.map( ( option ) => option.value ), [ '', 'exact.login' ] );
+		assert.equal( contributor.options[ 1 ].textContent, 'Display Name (exact.login)' );
+		assert.equal( contributor.options[ 0 ].textContent, 'ログイン名を直接入力' );
+		await load();
+		assert.equal( requests, 1 );
+	} );
+} );
+
 describe( 'translation contributor lookup', () => {
 	test( 'maps plugin and theme translation sets to their locale contributors page', () => {
 		const api = loadAllPageWarnings();

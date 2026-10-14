@@ -91,10 +91,6 @@
 	width: 24rem;
 }
 
-.wpgpt-all-page-warnings__contributor .button {
-	align-self: flex-start;
-}
-
 .wpgpt-all-page-warnings__scope {
 	margin: 10px 0;
 	font-weight: 600;
