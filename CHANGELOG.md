@@ -1,6 +1,10 @@
 # 2.3.0
-11.10.2026
+12.10.2026
 
+- Add My Waiting as an all-page Warning scan scope using one filtered GlotPress PO export
+- Add an optional contributor drop-down based on exact GlotPress user_login links, with manual login fallback
+- Automatically load contributors on the first Waiting-by-user selection (at most one request per page view); keep the single-PO-export scan
+- Document PO limitations for multiple Waiting proposals sharing an original and context
 - Add a "My suggestion" label to identify your own Waiting translations
 - Match translation authors using WordPress.org profile URLs
 - Automatically update labels when translation rows or statuses change

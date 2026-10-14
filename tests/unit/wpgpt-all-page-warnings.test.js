@@ -101,6 +101,10 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			slackSingle: wpgpt_all_page_warnings_slack_single,
 			copyText: wpgpt_all_page_warnings_copy_text,
 			buildExportUrl: wpgpt_all_page_warnings_build_export_url,
+			buildMyWaitingUrl: wpgpt_all_page_warnings_build_my_waiting_url,
+			buildContributorsUrl: wpgpt_all_page_warnings_build_contributors_url,
+			parseContributors: wpgpt_all_page_warnings_parse_contributors,
+			exportUrlForMode: wpgpt_all_page_warnings_export_url_for_mode,
 			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 			isPo: wpgpt_all_page_warnings_is_po,
 			parsePo: wpgpt_all_page_warnings_parse_po,
@@ -492,6 +496,157 @@ describe( 'Japanese Warning highlight ranges', () => {
 } );
 
 
+describe( 'automatic contributor loading', () => {
+	test( 'does not request outside user mode and avoids retrying a failed lookup', async () => {
+		const source = fs.readFileSync(
+			path.resolve( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( { URL } );
+		vm.runInContext( source, context );
+		const state = vm.runInContext( 'wpgptAllPageWarningsState', context );
+		const load = vm.runInContext( 'wpgpt_all_page_warnings_load_contributors', context );
+		const firstOption = { value: '', textContent: 'ログイン名を直接入力' };
+		state.ui = {
+			scan: {}, rescan: {}, mode: {}, login: {},
+			contributor: { firstElementChild: firstOption },
+			contributorStatus: { textContent: '' },
+		};
+		context.window = {
+			location: {
+				href: 'https://translate.wordpress.org/projects/wp-plugins/example/stable/ja/default/',
+			},
+		};
+		let requests = 0;
+		context.fetch = async () => {
+			requests++;
+			return { ok: false, status: 429 };
+		};
+
+		await load();
+		assert.equal( requests, 0 );
+		state.mode = 'my-waiting';
+		await Promise.all( [ load(), load() ] );
+		assert.equal( requests, 1 );
+		assert.equal( state.contributorsAttempted, true );
+		assert.equal( state.loadingContributors, false );
+		assert.equal( state.ui.contributor.disabled, false );
+		assert.equal( firstOption.textContent, 'ログイン名を直接入力' );
+		assert.match( state.ui.contributorStatus.textContent, /429/u );
+		await load();
+		assert.equal( requests, 1 );
+	} );
+
+	test( 'populates choices once and keeps manual input available', async () => {
+		const source = fs.readFileSync(
+			path.resolve( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( { URL } );
+		vm.runInContext( source, context );
+		const state = vm.runInContext( 'wpgptAllPageWarningsState', context );
+		const load = vm.runInContext( 'wpgpt_all_page_warnings_load_contributors', context );
+		const contributor = {
+			options: [ { value: '', textContent: 'ログイン名を直接入力' } ],
+			get firstElementChild() { return this.options[ 0 ]; },
+			replaceChildren() { this.options = []; },
+			appendChild( option ) { this.options.push( option ); },
+		};
+		state.mode = 'my-waiting';
+		state.ui = {
+			scan: {}, rescan: {}, mode: {}, login: {},
+			contributor,
+			contributorStatus: { textContent: '' },
+		};
+		context.window = {
+			location: {
+				href: 'https://translate.wordpress.org/projects/wp-plugins/example/stable/ja/default/',
+			},
+		};
+		context.document = { createElement: () => ( { value: '', textContent: '' } ) };
+		const link = { getAttribute: () => '/projects/example/?filters%5Buser_login%5D=exact.login' };
+		context.DOMParser = class {
+			parseFromString() {
+				return { querySelector: () => ( {
+					querySelectorAll: () => [ {
+						querySelectorAll: () => [ link ],
+						querySelector: () => ( { textContent: 'Display Name' } ),
+					} ],
+				} ) };
+			}
+		};
+		let requests = 0;
+		context.fetch = async () => {
+			requests++;
+			return { ok: true, text: async () => '<html></html>' };
+		};
+
+		await load();
+		assert.equal( requests, 1 );
+		assert.deepEqual( contributor.options.map( ( option ) => option.value ), [ '', 'exact.login' ] );
+		assert.equal( contributor.options[ 1 ].textContent, 'Display Name (exact.login)' );
+		assert.equal( contributor.options[ 0 ].textContent, 'ログイン名を直接入力' );
+		await load();
+		assert.equal( requests, 1 );
+	} );
+} );
+
+describe( 'translation contributor lookup', () => {
+	test( 'maps plugin and theme translation sets to their locale contributors page', () => {
+		const api = loadAllPageWarnings();
+		assert.equal(
+			api.buildContributorsUrl( 'https://translate.wordpress.org/projects/wp-plugins/vmpfence-security/stable-readme/ja/default/?filters%5Bstatus%5D=waiting' ),
+			'https://translate.wordpress.org/locale/ja/default/wp-plugins/vmpfence-security/'
+		);
+		assert.equal(
+			api.buildContributorsUrl( 'https://translate.wordpress.org/projects/wp-themes/sample/dev/pt-br/formal/' ),
+			'https://translate.wordpress.org/locale/pt-br/formal/wp-themes/sample/'
+		);
+	} );
+
+	test( 'does not guess a contributors page for an unsupported project or malformed translation URL', () => {
+		const api = loadAllPageWarnings();
+		[
+			'https://translate.wordpress.org/projects/wp/dev/ja/default/',
+			'https://translate.wordpress.org/projects/wp-plugins/name/',
+			'https://translate.wordpress.org/projects/wp-plugins/name/stable/readme/ja/default/extra/',
+		].forEach( ( url ) => {
+			assert.throws( () => api.buildContributorsUrl( url ), /直接入力/u );
+		} );
+	} );
+
+	test( 'uses the precise login filter, not a profile slug or display name', () => {
+		const api = loadAllPageWarnings();
+		const link = ( href ) => ( { getAttribute: () => href } );
+		const row = ( name, hrefs ) => ( {
+			querySelector: () => ( { textContent: name } ),
+			querySelectorAll: () => hrefs.map( link ),
+		} );
+		const document = {
+			querySelector: () => ( {
+				querySelectorAll: () => [
+					row( 'Public Name', [ '/projects/test/?filters%5Buser_login%5D=A.V.K' ] ),
+					row( 'Again', [ '/projects/test/?filters%5Buser_login%5D=A.V.K' ] ),
+					row( 'Other', [ '/projects/test/?filters%5Buser_login%5D=mehrazmorshed' ] ),
+					row( 'External', [ 'https://example.com/?filters%5Buser_login%5D=external' ] ),
+					row( 'No login', [ '/projects/test/?filters%5Bstatus%5D=waiting' ] ),
+					row( 'Malformed', [ '/projects/test/?filters%5Buser_login%5D=a%20b' ] ),
+				],
+			} ),
+		};
+		assert.deepEqual( normalize( api.parseContributors( document, 'https://translate.wordpress.org/locale/ja/default/wp-plugins/example/' ) ), [
+			{ name: 'Public Name', login: 'A.V.K' },
+			{ name: 'Other', login: 'mehrazmorshed' },
+		] );
+	} );
+
+	test( 'fails clearly when the expected contributors table is absent', () => {
+		const api = loadAllPageWarnings();
+		assert.throws(
+			() => api.parseContributors( { querySelector: () => null }, 'https://translate.wordpress.org/locale/ja/default/wp-plugins/example/' ),
+			/一覧が見つかりません/u
+		);
+	} );
+} );
+
 describe( 'PO export scanning', () => {
 	test( 'builds a PO export URL from the GlotPress filtered export link', () => {
 		const api = loadAllPageWarnings();
@@ -518,6 +673,46 @@ describe( 'PO export scanning', () => {
 			url,
 			'https://translate.wordpress.org/projects/example/ja/default/export-translations/?filters%5Bstatus%5D=current&format=po'
 		);
+	} );
+
+	test( 'My Waiting ignores inherited filters and uses one explicit PO export scope', () => {
+		const api = loadAllPageWarnings();
+		const pageDocument = {
+			querySelector() {
+				return {
+					getAttribute( name ) {
+						return 'href' === name ?
+							'/projects/example/ja/default/export-translations/?filters%5Bterm%5D=other&filters%5Bstatus%5D=current&filters%5Buser_login%5D=other' :
+							null;
+					},
+				};
+			},
+		};
+		const url = new URL( api.exportUrlForMode(
+			'my-waiting', 'my.login', pageDocument, 'https://translate.wordpress.org/projects/example/ja/default/'
+		) );
+		assert.equal( url.pathname, '/projects/example/ja/default/export-translations/' );
+		assert.deepEqual( Array.from( url.searchParams.entries() ), [
+			[ 'format', 'po' ],
+			[ 'filters[status]', 'waiting' ],
+			[ 'filters[user_login]', 'my.login' ],
+		] );
+	} );
+
+	test( 'rejects empty, profile URLs, and malformed login names without requesting an export', () => {
+		const api = loadAllPageWarnings();
+		const pageDocument = { querySelector() { throw new Error( 'Should not read export link' ); } };
+		[ '', '   ', 'https://profiles.wordpress.org/name/', 'a b', '日本語' ].forEach( ( value ) => {
+			assert.throws( () => api.buildMyWaitingUrl( value, pageDocument, 'https://translate.wordpress.org/' ), /ログイン名/u );
+		} );
+	} );
+
+	test( 'rejects a cross-origin or unrelated export path', () => {
+		const api = loadAllPageWarnings();
+		[ 'https://example.com/export-translations/', '/other-path/' ].forEach( ( href ) => {
+			const doc = { querySelector() { return { getAttribute( name ) { return 'href' === name ? href : null; } }; } };
+			assert.throws( () => api.buildMyWaitingUrl( 'valid-user', doc, 'https://translate.wordpress.org/' ), /不正/u );
+		} );
 	} );
 
 	test( 'builds a GlotPress original-search URL without the export path', () => {
