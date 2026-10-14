@@ -79,7 +79,7 @@ const wpgpt_settings = {
 	},
 	'ja_checks': {
 		'desc':           'Japanese checks',
-		'state':          'disabled',
+		'state':          'enabled',
 		'setting_type':   2,
 		'parent_setting': 'locale_checks',
 	},
