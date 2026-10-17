@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+  拡張機能の専用タブで既存判定を実行できるかを確認するための検証画面。
+  翻訳サイトとの通信や翻訳内容の保存は行わない。
+-->
+<html lang="ja">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>WPGP Tools 判定再利用 PoC</title>
+	<style>
+		body { font: 16px/1.6 sans-serif; margin: 2rem auto; padding: 0 1rem; max-width: 860px; }
+		label { display: block; margin: 1rem 0; }
+		textarea { display: block; width: 100%; box-sizing: border-box; }
+		pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f5f5f5; padding: 1rem; }
+		button { padding: .5rem 1rem; }
+	</style>
+	<script src="js/wpgpt-waiting-proposals-poc-bootstrap.js" defer></script>
+	<script src="js/wpgpt-functions.js" defer></script>
+	<script src="js/wpgpt-settings.js" defer></script>
+	<script src="js/wpgpt-checks.js" defer></script>
+	<script src="js/wpgpt-waiting-proposals-poc.js" defer></script>
+</head>
+<body>
+	<h1>専用タブでの判定再利用 PoC</h1>
+	<p>検証用の訳文だけを判定します。ネットワーク通信や翻訳の更新は行いません。</p>
+	<form id="poc-form">
+		<label>翻訳画面からコピーした設定（JSON、任意。空欄では拡張機能の初期設定）
+			<textarea id="poc-settings" rows="5" spellcheck="false"></textarea>
+		</label>
+		<label>原文
+			<textarea id="poc-original" rows="2" required>%1$s trend of article views over the last %2$s</textarea>
+		</label>
+		<label>訳文
+			<textarea id="poc-translation" rows="2" required>%s の過去 %s における記事の閲覧数の推移</textarea>
+		</label>
+		<button type="submit">このタブで既存判定を実行</button>
+	</form>
+	<pre id="poc-output" role="status" aria-live="polite">まだ判定していません。</pre>
+</body>
+</html>
