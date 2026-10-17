@@ -1602,6 +1602,24 @@ async function wpgpt_all_page_warnings_load_contributors() {
 }
 
 /**
+ * 確認対象と PO 出力の範囲を結果表示に示す。
+ *
+ * Waiting では同じ原文への複数提案が PO にすべて含まれないため、
+ * 取得できた翻訳に限ることを明記する。Current にはこの注意書きを付けない。
+ *
+ * @param {string} status 翻訳ステータス。
+ * @param {string} loginName 絞り込み対象の WordPress.org ログイン名。空文字列はすべての翻訳者。
+ * @returns {string} 結果に表示する確認対象の説明。
+ */
+function wpgpt_all_page_warnings_scope_label( status, loginName ) {
+	const scope = ( 'current' === status ? 'Current' : 'Waiting' ) + ' × ' +
+		( loginName ? '指定ログイン名「' + loginName + '」' : 'すべての翻訳者' );
+	// 複数 Waiting の取得漏れが確認されているため、Waiting だけに制約を示す。
+	return 'waiting' === status ?
+		scope + '（PO に含まれる翻訳のみ。複数の Waiting 提案は一部対象外）' : scope;
+}
+
+/**
  * 選択した翻訳取得対象について全件 Warning 確認を実行する。
  *
  * 二重実行と未保存訳文がある状態での走査を禁止し、取得・解析・表示の一連の処理中は
@@ -1638,9 +1656,7 @@ async function wpgpt_all_page_warnings_scan() {
 			throw new Error( 'WordPress.org のログイン名を入力してください。' );
 		}
 		const exportUrl = wpgpt_all_page_warnings_build_export_url( status, loginName );
-		const scope = ( 'current' === status ? 'Current' : 'Waiting' ) + ' × ' +
-			( loginName ? '指定ログイン名「' + loginName + '」' : 'すべての翻訳者' ) +
-			'（PO に出力された翻訳のみ。複数提案の網羅性は未確認）';
+		const scope = wpgpt_all_page_warnings_scope_label( status, loginName );
 		const po = await wpgpt_all_page_warnings_fetch_po( exportUrl );
 		const entries = wpgpt_all_page_warnings_parse_po( po );
 		wpgpt_all_page_warnings_set_status( entries.length + '件の翻訳データを確認しています…' );
