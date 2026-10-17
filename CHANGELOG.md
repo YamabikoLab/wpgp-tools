@@ -1,4 +1,5 @@
-# Unreleased
+# 2.4.0
+18.10.2026
 
 - Replace the all-page Warning scope modes with independent Current / Waiting and all / specific translator selectors
 - Use only the explicitly selected status and optional proposer login for each PO export; existing page search filters no longer apply
