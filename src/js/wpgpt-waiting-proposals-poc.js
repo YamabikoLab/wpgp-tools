@@ -6,8 +6,13 @@
 	'use strict';
 	const form = document.getElementById( 'poc-form' );
 	const output = document.getElementById( 'poc-output' );
-	form.addEventListener( 'submit', ( event ) => {
+	let checked = false;
+	form.addEventListener( 'submit', async ( event ) => {
 		event.preventDefault();
+		if ( checked ) {
+			output.textContent = '設定を変更して再検証する場合は、ページを再読み込みしてください。';
+			return;
+		}
 		try {
 			const raw = document.getElementById( 'poc-settings' ).value.trim();
 			if ( raw ) {
@@ -25,6 +30,15 @@
 					wpgpt_settings[ key ].state = value;
 				}
 			}
+			// 既存チェックが初期化時に設定値を参照するため、設定反映後に一度だけ読み込む。
+			await new Promise( ( resolve, reject ) => {
+				const script = document.createElement( 'script' );
+				script.src = 'js/wpgpt-checks.js';
+				script.onload = resolve;
+				script.onerror = () => reject( new Error( '既存判定スクリプトの読み込みに失敗しました。' ) );
+				document.head.append( script );
+			} );
+			checked = true;
 			// 原文側の /ja/ と異なる拡張機能 URL では日本語ルールが無効になる。
 			// 今回は日本語セットの結果比較だけに用途を限定し、ロケールを明示する。
 			wpgpt_is_japanese_locale = () => true;
