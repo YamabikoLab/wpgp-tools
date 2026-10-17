@@ -1,3 +1,10 @@
+# Unreleased
+
+- Replace the all-page Warning scope modes with independent Current / Waiting and all / specific translator selectors
+- Use only the explicitly selected status and optional proposer login for each PO export; existing page search filters no longer apply
+- Allow translator filtering for Current and Waiting; retrieve contributor candidates only on first use and retain manual login entry
+- Clarify that PO exports may omit multiple Waiting proposals and must not be described as a verified complete scan
+
 # 2.3.0
 12.10.2026
 
