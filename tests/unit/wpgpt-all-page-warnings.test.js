@@ -101,6 +101,7 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			slackSingle: wpgpt_all_page_warnings_slack_single,
 			copyText: wpgpt_all_page_warnings_copy_text,
 			buildExportUrl: wpgpt_all_page_warnings_build_export_url,
+			scopeLabel: wpgpt_all_page_warnings_scope_label,
 			buildContributorsUrl: wpgpt_all_page_warnings_build_contributors_url,
 			parseContributors: wpgpt_all_page_warnings_parse_contributors,
 			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
@@ -638,6 +639,22 @@ describe( 'translation contributor lookup', () => {
 		assert.throws(
 			() => api.parseContributors( { querySelector: () => null }, 'https://translate.wordpress.org/locale/ja/default/wp-plugins/example/' ),
 			/一覧が見つかりません/u
+		);
+	} );
+} );
+
+describe( 'PO scan scope labels', () => {
+	test( 'warns only for Waiting and retains the translator selection', () => {
+		const api = loadAllPageWarnings();
+		assert.equal( api.scopeLabel( 'current', '' ), 'Current × すべての翻訳者' );
+		assert.equal( api.scopeLabel( 'current', 'some.login' ), 'Current × 指定ログイン名「some.login」' );
+		assert.equal(
+			api.scopeLabel( 'waiting', '' ),
+			'Waiting × すべての翻訳者（PO に含まれる翻訳のみ。複数の Waiting 提案は一部対象外）'
+		);
+		assert.equal(
+			api.scopeLabel( 'waiting', 'some.login' ),
+			'Waiting × 指定ログイン名「some.login」（PO に含まれる翻訳のみ。複数の Waiting 提案は一部対象外）'
 		);
 	} );
 } );
