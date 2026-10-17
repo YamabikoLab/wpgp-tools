@@ -1,5 +1,5 @@
 /**
- * GlotPress の翻訳一覧を対象に、現在の絞り込み条件に対応する翻訳データを一括確認する機能を提供する。
+ * GlotPress の翻訳一覧を対象に、選択したステータスと翻訳者の翻訳データを一括確認する機能を提供する。
  *
  * このファイルは、全件確認の開始条件、取得した翻訳データの解析、指摘結果の保持、
  * 絞り込み・検索・ページ分割、問題箇所の表示、Slack 共有用文字列の生成、結果画面の状態管理を所有する。
@@ -1103,7 +1103,6 @@ const wpgptAllPageWarningsState = {
 	scanning: false,
 	checkedStrings: 0,
 	status: 'current',
-	loginName: '',
 	loadingContributors: false,
 	contributorsAttempted: false,
 	resultScope: '',
