@@ -288,7 +288,7 @@ function wpgpt_all_page_warnings_build_export_url(
 	}
 	const url = new URL( href, baseUrl );
 	// 同じサイトの正式な Export パス以外へ翻訳データを送信しない。
-	if ( url.origin !== new URL( baseUrl ).origin || ! /\\/export-translations\\/?$/u.test( url.pathname ) ) {
+	if ( url.origin !== new URL( baseUrl ).origin || ! /\/export-translations\/?$/u.test( url.pathname ) ) {
 		throw new Error( 'GlotPress の Export URL が不正です。' );
 	}
 	url.hash = '';
