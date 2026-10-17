@@ -546,7 +546,7 @@ describe( 'automatic contributor loading', () => {
 			appendChild( option ) { this.options.push( option ); },
 		};
 		state.ui = {
-			scan: {}, rescan: {}, mode: {}, login: {},
+			scan: {}, rescan: {}, statusSelect: {}, login: {},
 			contributor,
 			loginLabel: { hidden: true },
 			contributorStatus: { textContent: '' },
