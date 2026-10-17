@@ -31,3 +31,34 @@
 ## 技術上の判断材料
 
 GlotPress の上流実装では、`GP_Route_Translation::translations_get()` が `filters` を `for_translation()` へ渡し、`/api/` 経路のテンプレートが翻訳配列を JSON 化します。WordPress.org の環境が同じルーティング・認証・応答形式かは実ブラウザーで確かめてください。
+
+## 次の PoC: 原文 ID の解決と専用タブの判定再利用
+
+### A. 原文 ID の自動解決
+
+1. 前述と同じ日本語翻訳セット画面で、Chrome DevTools の Snippets に [`original-id-resolution-poc.js`](./original-id-resolution-poc.js) を貼り付けて実行してください。
+2. 原文 `%1$s trend of article views over the last %2$s` が入力された状態で、Context は空欄のまま「原文を1回だけ検索」を押してください。
+3. **「API 応答件数」「原文完全一致件数」「候補の原文 ID / 判定保留の理由」**を記録してください。
+
+この PoC は原文テキストに対する `filters[term]` / `filters[term_scope]=scope_originals` / `filters[status]=waiting` の GET を1回送信します。訳文の変更、連続巡回、ページングはしません。Context が応答にない場合は、**他の Context を取り違える危険があるため原文 ID を確定しません**。一意の候補が表示されても、ページングによる候補漏れは未確認です。完了判定ではなく、採用可能性の調査です。
+
+### B. Chrome 拡張機能の専用タブで既存判定を実行
+
+1. [`src/`](../../src) を Chrome の `chrome://extensions` から「パッケージ化されていない拡張機能を読み込む」で開いてください。**PR #32 のブランチを取得した作業コピー**を使用します（通常の公開版だけではこの検証画面はありません）。現在の設定を変更したくない場合は検証用 Chrome プロファイルで実行してください。
+2. 拡張機能の詳細から「ID」を確認し、Chrome のアドレスバーに `chrome-extension://<拡張機能ID>/wpgpt-waiting-proposals-poc.html` を入力して開いてください。拡張機能の詳細内の設定ページ URL を参考に ID をコピーできます。
+3. 同じ設定で比較したい場合、翻訳ページの DevTools Console で次の式を**自分で実行**して設定をコピーしてください（ログイン情報・訳文は含みませんが、設定文字列に個人的な単語を指定している場合は取り扱いに注意してください）。
+
+   ```js
+   copy(JSON.stringify(Object.fromEntries(
+     Object.entries(wpgpt_settings)
+       .filter(([, setting]) => Object.hasOwn(setting, 'state'))
+       .map(([key, setting]) => [key, setting.state])
+   )))
+   ```
+
+4. 専用タブの「設定（JSON）」欄に貼り付けてください。原文と訳文は前回の Waiting 提案（1件目）が初期入力されています。「このタブで既存判定を実行」を押します。
+5. `Warning 1件 / Notice 0件` と、前回の `Possible broken: %s instead of %1$s,%s instead of %2$s` が再現されるか確認してください。別の日本語ルールに該当する文章でも比較できます。**設定やテスト文を変更して再検証する場合は再読み込みしてください。**
+
+専用タブでは、判定コードを設定反映後に読み込みます。これは `custom_period` などが読み込み時に確定するためです。拡張機能側は別のオリジンなので、**利用者設定は自動同期しません**。コピー・貼り付けは PoC 限定の手作業であり、本実装時は保存領域と受け渡し方法を再設計します。日本語判定のためロケールを明示的に日本語として扱います。
+
+**制限:** この専用タブ PoC には GlotPress API への通信、実データ受け渡し、原文 ID の解決、結果の永続保存はありません。既存判定の再利用だけを独立に検証します。翻訳の保存・承認操作はありません。
