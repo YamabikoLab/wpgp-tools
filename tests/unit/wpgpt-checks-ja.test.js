@@ -1383,8 +1383,8 @@ describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
 	 * 各コロンに適切な例外を適用し、別のコロンの指摘を失わないことを確認する。
 	 */
 	test( 'numeric and ordinary colons are assessed independently in the same translation', () => {
-		assertClean( runAll( '時刻 12:30、件数: 10' ) );
-		const result = runRule( 'ja_half_full_spacing', 'Label', '時刻 12:30、件数:10' );
+		assertClean( runAll( '時刻12:30、件数: 10' ) );
+		const result = runRule( 'ja_half_full_spacing', 'Label', '時刻12:30、件数:10' );
 		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
 	} );
 
