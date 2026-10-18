@@ -703,7 +703,7 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 	const { protected_indexes, hidden_markup_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const spacing_text = translated.replace( /%\d*\$?d/gu, ( value ) => '0'.repeat( value.length ) );
 	const spacing_characters = new Set( [ ' ', '\u00a0', '　' ] );
-	const valid_colon_spacing_characters = new Set( [ ' ', '　' ] );
+	const valid_colon_spacing_characters = new Set( [ ' ' ] );
 	const findings = [];
 	const boundary_matches = [];
 	let boundary_message;
@@ -831,14 +831,12 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		const after = wpgpt_ja_visible_adjacent_text( translated, hidden_markup_indexes, index + 1, 1, spacing_characters );
 
 		/*
-		 * 「12:30」のように、空白を挟まず数字同士をコロンで区切る場合は
-		 * 時刻表記として扱い、コロン後の空白を要求しない。
+		 * 数字同士をコロンで区切る表記では、前後とも空白を入れない。
+		 * 不要な空白がある場合も同じ区切りとして扱い、修正を案内する。
 		 */
-		if (
-			before && after &&
-			0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length &&
-			/\d/u.test( before.character ) && /\d/u.test( after.character )
-		) continue;
+		const numeric_separator = before && after &&
+			/\d/u.test( before.character ) && /\d/u.test( after.character );
+		if ( numeric_separator && 0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length ) continue;
 
 		/*
 		 * コロンの直前には空白を置かないため、
@@ -853,13 +851,18 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		 */
 		if ( after ) {
 			/*
-			 * コロンの直後は、許可された空白文字が1つだけ存在する状態を正しいものとする。
-			 * 空白がない、複数ある、または許可されていない空白文字を含む場合は指摘する。
+			 * かぎ括弧の前には空白を入れないため、コロン後にも空白を要求しない。
+			 * 不要な空白は既存のかぎ括弧専用規則に委ね、重複指摘を避ける。
 			 */
-			// コロン後の空白列に、許可していない空白文字が1つでも含まれるかを確認する。
+			if ( '「' === after.character || '『' === after.character ) continue;
+
+			/*
+			 * 数字の区切りには空白を入れず、それ以外のコロンの後には
+			 * 半角スペース1つを要求する。全角スペースや複数空白は認めない。
+			 */
 			const invalid = after.spacing_indexes.some( ( spacing_index ) => ! valid_colon_spacing_characters.has( translated[ spacing_index ] || '' ) );
-			// 空白なし・複数空白・不正な空白文字のいずれかなら、正しいコロン後スペースではない。
-			if ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) {
+			if ( ( numeric_separator && after.spacing_indexes.length > 0 ) ||
+				( ! numeric_separator && ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) ) ) {
 				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
 			}
 		}
@@ -931,11 +934,10 @@ function wpgpt_ja_check_parentheses( translated ) {
 			const outside = wpgpt_ja_outer_parentheses_spacing( translated, hidden_markup_indexes, index + 1, 1 );
 
 			/*
-			 * 閉じ括弧の直後が句点などの例外でない場合は、
-			 * 外側に半角スペース1つを要求する。
-			 * 「。」は閉じ括弧の直後に直接置けるため、明示的に対象外とする。
+			 * 閉じ括弧の直後は原則として半角スペース1つを要求する。
+			 * 句読点・かぎ括弧とコロンは、各記号の前に空白を置かない規則を優先する。
 			 */
-			if ( outside && '。' !== outside.character && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
+			if ( outside && ':' !== outside.character && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
 				outer_matches.push( wpgpt_ja_match( index, Math.min( translated.length, index + Math.max( 2, outside.space_count + 1 ) ) ) );
 			}
 		}
