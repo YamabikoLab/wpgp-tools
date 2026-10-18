@@ -93,7 +93,8 @@ function wpgpt_all_page_warnings_normalize_result( result ) {
  *
  * @param {Object[]} results 全件確認で Warning が見つかった翻訳文字列。
  * @param {Set<string>} selectedRules 利用者が絞り込み対象として選択したルール識別子。
- * @returns {Object[]} 一覧表示に使用する Warning を付与した翻訳文字列。
+ * @param {boolean} includeWithoutWarnings Waiting の Warning がない翻訳も表示するか。
+ * @returns {Object[]} 一覧表示に使用する Warning 判定付きの翻訳文字列。
  */
 function wpgpt_all_page_warnings_filter_results( results, selectedRules, includeWithoutWarnings = false ) {
 	// 絞り込みの有無にかかわらず、すべての結果を同じ Warning 表現へ揃えてから表示条件を適用する。
