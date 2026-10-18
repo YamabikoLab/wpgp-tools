@@ -36,107 +36,59 @@
 	 * @param {string} singularOriginal 日本語ルール判定の基準となる単数形原文。
 	 * @param {string} translated 対象の訳文。
 	 * @param {number} form 訳文フォーム番号（1始まり）。
-	 * @returns {{warnings: Object[], notices: HTMLElement[]}} 表示用の指摘。
+	 * @returns {{warnings: Object[], findings: Object[], notices: HTMLElement[]}} 元の判定と位置情報。
 	 */
 	function checkForm( original, singularOriginal, translated, form ) {
 		const checks = wpgpt_run_checks( original, translated, false, singularOriginal );
-		const result = wpgpt_all_page_warnings_normalize_result( {
+		return {
 			warnings: checks.warning.map( ( warning ) => ( {
 				text: warning.textContent,
 				form,
 				setting: null,
 			} ) ),
-			japaneseFindings: wpgpt_all_page_warnings_collect_japanese_findings(
+			findings: wpgpt_all_page_warnings_collect_japanese_findings(
 				singularOriginal, translated, form
 			),
-		} );
-		return { warnings: result.displayWarnings, notices: checks.notice };
+			notices: checks.notice,
+		};
 	}
 
 	/**
-	 * 翻訳者と翻訳 ID を維持しながら、原文・訳文・指摘を横並びの結果カードで表示する。
+	 * 各提案を既存の Warning 結果カードとして描画し、画面の操作と見た目を統一する。
+	 * 異なる提案を区別する情報はカード見出しで保持し、比較画面内からの再取得操作は設けない。
 	 *
-	 * @param {Object} proposal 取得済みの個別 Waiting 提案。
-	 * @param {Object} data 元ページの原文、Context、翻訳セット情報。
-	 * @returns {HTMLElement} 1提案の読み取り専用結果。
+	 * @param {Object} proposal 取得済みの Waiting 提案。
+	 * @param {Object} data 元ページの原文、文脈、翻訳セット情報。
+	 * @returns {HTMLElement} 1提案の読み取り専用結果カード。
 	 */
 	function proposalCard( proposal, data ) {
-		const card = element( 'article' );
-		card.className = 'wpgpt-all-page-warnings__card';
-		const head = element( 'div' );
-		head.className = 'wpgpt-all-page-warnings__card-head';
-		head.append(
-			element( 'strong', '提案者: ' + ( proposal.user?.user_login || '取得不可' ) ),
-			element( 'span', '翻訳 ID: ' + proposal.id )
-		);
-		card.appendChild( head );
-
-		const body = element( 'div' );
-		body.className = 'wpgpt-all-page-warnings__card-body';
-		const source = element( 'div' );
-		source.className = 'wpgpt-all-page-warnings__field';
-		source.append( element( 'strong', '原文' ), element( 'div', data.original ) );
-		const translatedField = element( 'div' );
-		translatedField.className = 'wpgpt-all-page-warnings__field';
-		translatedField.appendChild( element( 'strong', '訳文' ) );
-		const warnings = element( 'div' );
-		warnings.className = 'wpgpt-all-page-warnings__warnings';
-		warnings.appendChild( element( 'strong', 'Warnings / Notices' ) );
-
-		const allWarnings = [];
-		const allNotices = [];
-		// 各訳文フォームは対応する原文と個別に判定し、別の提案・フォームの指摘を混在させない。
+		const warnings = [];
+		const japaneseFindings = [];
+		const notices = [];
+		// 翻訳フォームごとに原文との対応を保ち、既存チェックの件数と日本語指摘位置を収集する。
 		( proposal.translations || [] ).forEach( ( translation, index ) => {
 			const form = index + 1;
 			const original = index === 0 ? data.original : ( proposal.plural || data.original );
 			const checked = checkForm( original, data.original, translation, form );
-			const translatedText = element( 'div' );
-			translatedText.className = 'wpgpt-all-page-warnings__translation';
-			const ranges = wpgpt_all_page_warnings_normalize_ranges(
-				checked.warnings.flatMap( ( warning ) => warning.matches || [] ),
-				translation.length
-			);
-			// 強調位置は日本語ルールから確定できた範囲だけを使用し、推測で着色しない。
-			wpgpt_all_page_warnings_append_highlighted_text( translatedText, translation, ranges );
-			if ( proposal.translations.length > 1 ) {
-				translatedField.appendChild( element( 'small', '訳文 ' + form ) );
-			}
-			translatedField.appendChild( translatedText );
-			allWarnings.push( ...checked.warnings );
-			checked.notices.forEach( ( notice ) => allNotices.push( { form, text: notice.textContent } ) );
+			warnings.push( ...checked.warnings );
+			japaneseFindings.push( ...checked.findings );
+			checked.notices.forEach( ( notice ) => notices.push( { form, text: notice.textContent } ) );
 		} );
-		if ( ! proposal.translations?.length ) {
-			translatedField.appendChild( element( 'span', '訳文がありません。' ) );
-		}
-		body.append( source, translatedField );
-
-		const count = element( 'p', 'Warning ' + allWarnings.length + '件 / Notice ' + allNotices.length + '件' );
-		warnings.appendChild( count );
-		const list = element( 'ul' );
-		const reviewResult = {
+		const result = wpgpt_all_page_warnings_normalize_result( {
 			original: data.original,
 			context: data.context,
 			translations: proposal.translations,
 			sourceUrl: data.setUrl,
-		};
-		// 元ページのルール番号、指摘位置、コピー操作を再利用し、同じ結果を同じ形で示す。
-		allWarnings.forEach( ( warning ) => {
-			list.appendChild(
-				wpgpt_all_page_warnings_warning_item(
-					warning, proposal.translations.length > 1, reviewResult
-				)
-			);
+			warnings,
+			japaneseFindings,
 		} );
-		allNotices.forEach( ( notice ) => {
-			const label = proposal.translations.length > 1 ? 'Form #' + notice.form + ': ' : '';
-			const item = element( 'li', label + notice.text );
-			item.className = 'waiting-notice';
-			list.appendChild( item );
+		// 同じ原文の複数提案も、提案者と翻訳 ID を失わない見出しで区別する。
+		return wpgpt_all_page_warnings_result_card( result, {
+			sourceLabel: '提案者: ' + ( proposal.user?.user_login || '取得不可' ),
+			detailLabel: '翻訳 ID: ' + proposal.id,
+			hideCompare: true,
+			notices,
 		} );
-		warnings.appendChild( list );
-		body.appendChild( warnings );
-		card.appendChild( body );
-		return card;
 	}
 
 	/**
