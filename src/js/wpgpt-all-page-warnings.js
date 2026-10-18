@@ -2043,6 +2043,92 @@ function wpgpt_all_page_warnings_visible_original_id( result, pageDocument = doc
 }
 
 /**
+ * 元の翻訳セットに対する Waiting の原文検索 URL を生成する。
+ *
+ * 原文 ID の確認に必要な条件以外を付けず、現在の GlotPress 画面の
+ * 検索条件やページ番号を引き継がない。
+ *
+ * @param {string} sourceUrl 確認対象の GlotPress 翻訳セット URL。
+ * @param {string} original 検索する単数形原文。
+ * @returns {string} 原文検索画面の URL。
+ */
+function wpgpt_all_page_warnings_waiting_search_url( sourceUrl, original ) {
+	const url = new URL( sourceUrl );
+	// 比較対象の翻訳セットから離れたサイトや不正な URL へリクエストを送らない。
+	if ( url.origin !== 'https://translate.wordpress.org' ||
+		! /^\/projects\/(?:[a-z0-9_.-]+\/)+[a-z0-9_-]+\/[a-z0-9_-]+\/?$/iu.test( url.pathname ) ) {
+		throw new Error( '翻訳セットの URL が不正です。' );
+	}
+	url.search = '';
+	url.hash = '';
+	url.searchParams.set( 'filters[status]', 'waiting' );
+	url.searchParams.set( 'filters[term]', original );
+	url.searchParams.set( 'filters[term_scope]', 'scope_originals' );
+	return url.href;
+}
+
+/**
+ * 取得した原文検索画面から、同じ原文・Context に属する原文 ID を確定する。
+ *
+ * 取得した HTML にページングがある場合や異なる ID が混在する場合は、
+ * 未確認の候補を取り違えないように確定せず終了する。
+ *
+ * @param {Document} pageDocument GlotPress の検索結果 HTML。
+ * @param {Object} result 比較対象の原文と Context を含む走査結果。
+ * @returns {string|null} 条件を満たす原文 ID。特定できない場合は null。
+ */
+function wpgpt_all_page_warnings_waiting_search_id( pageDocument, result ) {
+	const ids = new Set();
+	const original = result.singularOriginal || result.original;
+	// 取得した一覧のすべての行を照合し、翻訳 ID が異なっても原文 ID が同一なら一候補と扱う。
+	pageDocument.querySelectorAll( '#translations tr.preview[id^="preview-"]' ).forEach( ( preview ) => {
+		const pair = preview.id.match( /^preview-([1-9][0-9]*)-([1-9][0-9]*)$/u );
+		if ( ! pair ) return;
+		const editor = pageDocument.getElementById( 'editor-' + pair[ 1 ] + '-' + pair[ 2 ] );
+		const raw = editor?.querySelector( '.original_raw' )?.textContent;
+		const displayed = preview.querySelector( '.original-text' )?.textContent;
+		const context = preview.querySelector( '.context' )?.textContent || null;
+		// 原文と Context は部分一致ではなく完全一致で確認し、同じ文字列の別用途を混同しない。
+		if ( ( typeof raw === 'string' ? raw : displayed ) === original &&
+			context === ( result.context || null ) ) {
+			ids.add( pair[ 1 ] );
+		}
+	} );
+	// 別ページに未確認の原文がある可能性がある場合は、1回の検索だけで確定しない。
+	const hasPagination = Array.from( pageDocument.querySelectorAll( '.paging a' ) )
+		.some( ( link ) => link.getAttribute( 'href' ) );
+	return ! hasPagination && ids.size === 1 ? [ ...ids ][ 0 ] : null;
+}
+
+/**
+ * 原文検索画面の HTML を1回だけ取得し、確認できた原文 ID を返す。
+ *
+ * 画面の絞り込み状態は変更せず、再試行やページ巡回は行わない。
+ * 検索失敗時は推測で原文 ID を使用せず、比較を安全に停止する。
+ *
+ * @param {string} sourceUrl 確認対象の翻訳セット URL。
+ * @param {Object} result 比較対象の原文と Context。
+ * @returns {Promise<string>} 一意に確認できた原文 ID。
+ * @throws {Error} HTML 形式以外、HTTP エラー、候補が不確実な場合。
+ */
+async function wpgpt_all_page_warnings_find_waiting_original_id( sourceUrl, result ) {
+	const original = result.singularOriginal || result.original;
+	const url = wpgpt_all_page_warnings_waiting_search_url( sourceUrl, original );
+	const response = await fetch( url, { method: 'GET', credentials: 'same-origin', redirect: 'error' } );
+	if ( ! response.ok ) throw new Error( '原文検索に失敗しました: HTTP ' + response.status );
+	if ( ! /text\/html/iu.test( response.headers.get( 'content-type' ) || '' ) ) {
+		throw new Error( '原文検索で HTML を取得できませんでした。' );
+	}
+	const html = new DOMParser().parseFromString( await response.text(), 'text/html' );
+	const id = wpgpt_all_page_warnings_waiting_search_id( html, result );
+	// 検索結果の曖昧さは通常の API 取得エラーとは区別し、手動確認の余地を残す。
+	if ( ! id ) {
+		throw new Error( '原文検索だけでは原文 ID を一意に確認できませんでした。GlotPress の一覧で対象原文を表示してから再実行してください。' );
+	}
+	return id;
+}
+
+/**
  * 個別確認に使う安全な GlotPress API の URL を作る。
  *
  * @param {string} sourceUrl PO の対象翻訳セットから生成された元画面の URL。
@@ -2134,9 +2220,9 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 		const original = result.singularOriginal || result.original;
 		const source = result.sourceUrl;
 		let id = wpgpt_all_page_warnings_visible_original_id( result );
-		// API の候補検索には総件数がないため、結果全体の一意性を確認できない場合は通信せず停止する。
+		// 表示中の行で特定できない場合に限り、GlotPress の原文検索を1回だけ実行する。
 		if ( ! id ) {
-			throw new Error( '原文 ID を現在の翻訳一覧で確認できません。対象原文を GlotPress の一覧に表示してから再実行してください。' );
+			id = await wpgpt_all_page_warnings_find_waiting_original_id( source, result );
 		}
 		const apiUrl = wpgpt_all_page_warnings_waiting_api_url( source, {
 			original_id: id,
