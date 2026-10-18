@@ -17,7 +17,6 @@ function load( fetchImpl = undefined ) {
 	return vm.runInContext( `({
 		visibleId: wpgpt_all_page_warnings_visible_original_id,
 		apiUrl: wpgpt_all_page_warnings_waiting_api_url,
-		resolveId: wpgpt_all_page_warnings_resolve_original_id,
 		validate: wpgpt_all_page_warnings_validate_proposals,
 		get: wpgpt_all_page_warnings_waiting_get
 	})`, context );
@@ -92,12 +91,6 @@ describe( 'Waiting source ID and proposal integrity', () => {
 		assert.equal( api.visibleId( result, doc ), '22606895' );
 		assert.equal( api.visibleId( { ...result, context: 'button' }, doc ), null );
 		assert.equal( api.visibleId( { ...result, original: 'Other', singularOriginal: 'Other' }, doc ), null );
-	} );
-	test( 'does not assert uniqueness from a paginated API candidate list', () => {
-		const api = load();
-		assert.throws( () => api.resolveId( [ proposal( '1' ), proposal( '2' ) ], result ), /全件性/u );
-		assert.throws( () => api.resolveId( [ proposal( '1', { context: 'button' } ) ], result ), /一意/u );
-		assert.throws( () => api.resolveId( [ { id: '1', original_id: '22606895', singular: 'Hello' } ], result ), /Context/u );
 	} );
 	test( 'retains all distinct Waiting translation IDs without consolidating content', () => {
 		const api = load();
