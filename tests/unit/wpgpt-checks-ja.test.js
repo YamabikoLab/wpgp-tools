@@ -1405,7 +1405,7 @@ describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
 	 */
 	test( 'spacing precedence respects visible boundaries across markup', () => {
 		assertClean( runAll( '<strong>項目:</strong>「設定」' ) );
-		assertClean( runAll( '設定 (詳細)</strong>: 値' ) );
+		assertClean( runAll( '<strong>設定 (詳細)</strong>: 値' ) );
 	} );
 
 	/**
