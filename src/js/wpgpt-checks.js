@@ -819,7 +819,7 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		}
 	}
 
-	// コロン固有の規則として、表示上の前後関係を基準に「前は空白なし、後は1つ」を確認する。
+	// 翻訳文中の各コロンを確認し、数字の区切りやかぎ括弧の例外を優先して前後の空白を判定する。
 	for ( let index = 0; index < translated.length; index++ ) {
 
 		/*
@@ -836,6 +836,10 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		 */
 		const numeric_separator = before && after &&
 			/\d/u.test( before.character ) && /\d/u.test( after.character );
+		/*
+		 * 数字の区切りに既に空白がない場合は適正な表記として扱い、
+		 * 通常のコロン後スペース規則を適用しない。
+		 */
 		if ( numeric_separator && 0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length ) continue;
 
 		/*
@@ -860,7 +864,13 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 			 * 数字の区切りには空白を入れず、それ以外のコロンの後には
 			 * 半角スペース1つを要求する。全角スペースや複数空白は認めない。
 			 */
+			// コロン後に空白がある場合、半角スペース以外の文字が含まれていないか確認する。
 			const invalid = after.spacing_indexes.some( ( spacing_index ) => ! valid_colon_spacing_characters.has( translated[ spacing_index ] || '' ) );
+			/*
+			 * 数字の区切りは空白があれば不要として指摘する。
+			 * 通常のコロンは半角スペースが1つ以外の場合に指摘し、
+			 * 別の規則と相反する修正を要求しない。
+			 */
 			if ( ( numeric_separator && after.spacing_indexes.length > 0 ) ||
 				( ! numeric_separator && ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) ) ) {
 				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
@@ -894,7 +904,7 @@ function wpgpt_ja_check_parentheses( translated ) {
 	const findings = [];
 	const full_width_matches = [];
 	const outer_matches = [];
-	// 丸括弧の表記と、利用者に見える外側文字とのスペース関係を翻訳文全体で確認する。
+	// 本文中の各丸括弧について、半角表記と外側の空白を確認し、句読点・コロンの優先規則を適用する。
 	for ( let index = 0; index < translated.length; index++ ) {
 
 		/*
