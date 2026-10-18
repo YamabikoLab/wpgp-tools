@@ -1999,10 +1999,10 @@ function wpgpt_all_page_warnings_visible_original_id( result, pageDocument = doc
 function wpgpt_all_page_warnings_waiting_api_url( sourceUrl, filters ) {
 	const url = new URL( sourceUrl );
 	if ( url.origin !== 'https://translate.wordpress.org' ||
-		! /^\\/projects\\/(?:[a-z0-9_.-]+\\/)+[a-z0-9_-]+\\/[a-z0-9_-]+\\/?$/iu.test( url.pathname ) ) {
+		! /^\/projects\/(?:[a-z0-9_.-]+\/)+[a-z0-9_-]+\/[a-z0-9_-]+\/?$/iu.test( url.pathname ) ) {
 		throw new Error( '翻訳セットの URL が不正です。' );
 	}
-	url.pathname = '/api' + url.pathname.replace( /\\/$/u, '' ) + '/';
+	url.pathname = '/api' + url.pathname.replace( /\/$/u, '' ) + '/';
 	url.search = '';
 	url.hash = '';
 	url.searchParams.set( 'filters[status]', 'waiting' );
@@ -2021,7 +2021,7 @@ function wpgpt_all_page_warnings_waiting_api_url( sourceUrl, filters ) {
 async function wpgpt_all_page_warnings_waiting_get( url ) {
 	const response = await fetch( url, { method: 'GET', credentials: 'same-origin', redirect: 'error' } );
 	if ( ! response.ok ) throw new Error( 'HTTP ' + response.status );
-	if ( ! /application\\/json/iu.test( response.headers.get( 'content-type' ) || '' ) ) {
+	if ( ! /application\/json/iu.test( response.headers.get( 'content-type' ) || '' ) ) {
 		throw new Error( 'GlotPress API が JSON を返しませんでした。' );
 	}
 	const data = await response.json();
