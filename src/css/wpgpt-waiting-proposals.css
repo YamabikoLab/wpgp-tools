@@ -1,12 +1,13 @@
 /*
- * Waiting の比較タブを元の Warning 結果に合わせて表示する。
- * 既存の結果カードと指摘強調のデザインを再利用し、専用タブ固有の余白だけを調整する。
+ * Waiting 比較画面の拡張機能タブ固有の外観を定義する。
+ * 結果カードは元の全件 Warning スタイルを共有し、WordPress 本体の CSS がない
+ * 専用タブでも同じボタン、文字サイズ、余白を提供する。
  */
 body {
 	margin: 0;
 	background: #f6f7f7;
 	color: #1d2327;
-	font: 16px/1.6 system-ui, sans-serif;
+	font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 main {
 	max-width: 1200px;
@@ -14,7 +15,8 @@ main {
 	padding: 0 18px 48px;
 }
 h1 {
-	font-size: 1.7rem;
+	margin: 0 0 12px;
+	font-size: 22px;
 }
 #waiting-status {
 	border-left: 4px solid #2271b1;
@@ -28,19 +30,41 @@ h1 {
 	margin: 12px 0;
 }
 #waiting-results .wpgpt-all-page-warnings__card-head {
-	justify-content: space-between;
+	font-size: 13px;
 }
-#waiting-results .wpgpt-all-page-warnings__field > div {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
+/* 元画面で WordPress が供給するボタンの外観を、専用タブにも補完する。 */
+#waiting-results .button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-height: 30px;
+	padding: 4px 12px;
+	border: 1px solid #2271b1;
+	border-radius: 2px;
+	background: #f6f7f7;
+	color: #2271b1;
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.4;
+	text-decoration: none;
+	cursor: pointer;
 }
-#waiting-results .wpgpt-all-page-warnings__translation + small,
-#waiting-results .wpgpt-all-page-warnings__field > small {
-	display: block;
-	margin-top: 8px;
+#waiting-results .button:hover {
+	border-color: #135e96;
+	color: #135e96;
+	background: #f0f6fc;
 }
-#waiting-results .wpgpt-all-page-warnings__warnings > p {
-	margin: 2px 0 8px;
+#waiting-results .button:focus-visible {
+	box-shadow: 0 0 0 1px #2271b1;
+}
+#waiting-results .button.button-small {
+	min-height: 26px;
+	padding: 2px 8px;
+	font-size: 12px;
+}
+#waiting-results .wpgpt-all-page-warnings__warnings > strong + ul {
+	margin-top: 0;
 }
 .waiting-note {
 	color: #664d00;
@@ -54,9 +78,4 @@ h1 {
 :focus-visible {
 	outline: 3px solid #2271b1;
 	outline-offset: 3px;
-}
-@media (max-width: 680px) {
-	#waiting-results .wpgpt-all-page-warnings__card-body {
-		grid-template-columns: minmax(0, 1fr);
-	}
 }
