@@ -97,7 +97,7 @@ describe( 'Waiting source ID and proposal integrity', () => {
 		const api = load();
 		assert.throws( () => api.resolveId( [ proposal( '1' ), proposal( '2' ) ], result ), /全件性/u );
 		assert.throws( () => api.resolveId( [ proposal( '1', { context: 'button' } ) ], result ), /一意/u );
-		assert.throws( () => api.resolveId( [ proposal( '1', { context: undefined } ) ], result ), /一意/u );
+		assert.throws( () => api.resolveId( [ { id: '1', original_id: '22606895', singular: 'Hello' } ], result ), /Context/u );
 	} );
 	test( 'retains all distinct Waiting translation IDs without consolidating content', () => {
 		const api = load();
