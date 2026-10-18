@@ -1,5 +1,5 @@
 # 2.4.0
-18.10.2026
+19.10.2026
 
 - Replace the all-page Warning scope modes with independent Current / Waiting and all / specific translator selectors
 - Use only the explicitly selected status and optional proposer login for each PO export; existing page search filters no longer apply
@@ -10,6 +10,9 @@
 - Allow Waiting translations without Warnings to be included in scan results without affecting Warning counts
 - Resolve original IDs using the current GlotPress page or a single filtered HTML request, with strict validation
 - Limit proposal retrieval to explicit user actions and document potential API pagination limitations
+- Fix conflicting Warnings between Japanese translation style guide spacing rules
+- Improve spacing checks for colons, Japanese quotation marks, parentheses, and numeric separators
+- Add regression tests to prevent contradictory spacing Warnings
 
 # 2.3.0
 12.10.2026
