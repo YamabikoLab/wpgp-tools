@@ -1379,6 +1379,36 @@ describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
 	} );
 
 	/**
+	 * 一つの翻訳に数字の区切りと通常のコロンが混在しても、
+	 * 各コロンに適切な例外を適用し、別のコロンの指摘を失わないことを確認する。
+	 */
+	test( 'numeric and ordinary colons are assessed independently in the same translation', () => {
+		assertClean( runAll( '時刻 12:30、件数: 10' ) );
+		const result = runRule( 'ja_half_full_spacing', 'Label', '時刻 12:30、件数:10' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+	} );
+
+	/**
+	 * 数字区切りの前後に不要な空白がある場合でも、
+	 * コロン前後をそれぞれ修正できることを確認する。
+	 */
+	test( 'numeric separator spacing is checked on both sides of a colon', () => {
+		const result = runRule( 'ja_half_full_spacing', 'Label', '12 : 30' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の前のスペースは不要です' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+		assertClean( runAll( '12:30' ) );
+	} );
+
+	/**
+	 * 表示されないマークアップを挟んでも、コロンと丸括弧の
+	 * 例外を画面上の文字の並びとして一貫して判断することを確認する。
+	 */
+	test( 'spacing precedence respects visible boundaries across markup', () => {
+		assertClean( runAll( '<strong>項目:</strong>「設定」' ) );
+		assertClean( runAll( '設定 (詳細)</strong>: 値' ) );
+	} );
+
+	/**
 	 * 警告と通知の設定変更によって、専用ルールの指摘内容が
 	 * 消失したり誤った重要度に振り分けられたりしないことを確認する。
 	 */
