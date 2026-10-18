@@ -712,6 +712,7 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 	let unnecessary_symbol;
 	const colon_before_matches = [];
 	const colon_after_matches = [];
+	const numeric_colon_after_matches = [];
 
 	// 半角文字と日本語の境界を確認し、必要な半角スペースが1つだけ存在することを保証する。
 	for ( let index = 0; index < spacing_text.length - 1; index++ ) {
@@ -874,7 +875,8 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 			 */
 			if ( ( numeric_separator && after.spacing_indexes.length > 0 ) ||
 				( ! numeric_separator && ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) ) ) {
-				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
+				const matches = numeric_separator ? numeric_colon_after_matches : colon_after_matches;
+				matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
 			}
 		}
 	}
@@ -885,8 +887,10 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 	unnecessary_symbol && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, `「${unnecessary_symbol}」の前後のスペースは不要です`, symbol_matches ) );
 	// コロン前の不要な空白が1件以上あった場合だけ、コロン前の指摘を結果へ追加する。
 	colon_before_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の前のスペースは不要です', colon_before_matches ) );
-	// コロン後の空白不足・不正が1件以上あった場合だけ、コロン後の指摘を結果へ追加する。
+	// 通常のコロン後では半角スペース1つを要求し、数字区切りの不要な空白とは案内を分ける。
 	colon_after_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の後にスペースを1つ入れてください', colon_after_matches ) );
+	// 数字区切りの後方に空白がある場合は、追加ではなく削除するよう案内する。
+	numeric_colon_after_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の後のスペースは不要です', numeric_colon_after_matches ) );
 	return findings;
 }
 
