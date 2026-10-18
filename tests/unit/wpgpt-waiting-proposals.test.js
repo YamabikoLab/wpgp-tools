@@ -1,5 +1,5 @@
 /**
- * Waiting 個別比較で、誤った原文・別翻訳者を表示しないための取得条件と通信境界を検証する。
+ * Waiting 個別比較で、原文の取り違えを防ぎ、翻訳者によらず提案を表示するための取得条件を検証する。
  * 実ブラウザー通信を模造せず、対象の識別・応答検証・エラー条件を保護する。
  */
 'use strict';
@@ -18,6 +18,7 @@ function load( fetchImpl = undefined, Parser = undefined ) {
 		visibleId: wpgpt_all_page_warnings_visible_original_id,
 		apiUrl: wpgpt_all_page_warnings_waiting_api_url,
 		validate: wpgpt_all_page_warnings_validate_proposals,
+		open: wpgpt_all_page_warnings_open_waiting,
 		get: wpgpt_all_page_warnings_waiting_get,
 		searchUrl: wpgpt_all_page_warnings_waiting_search_url,
 		searchId: wpgpt_all_page_warnings_waiting_search_id,
@@ -41,6 +42,16 @@ function proposal( id, overrides = {} ) {
 }
 
 describe( 'Waiting comparison API request', () => {
+	test( 'individual comparison always requests all Waiting translators', () => {
+		const api = load();
+		const url = new URL( api.apiUrl( source + '?filters[user_login]=alice', {
+			original_id: '22606895',
+		} ) );
+		assert.deepEqual( Array.from( url.searchParams.entries() ), [
+			[ 'filters[status]', 'waiting' ], [ 'filters[original_id]', '22606895' ],
+		] );
+	} );
+
 	test( 'builds restricted API URLs without old filters or unrelated parameters', () => {
 		const api = load();
 		const url = new URL( api.apiUrl( source + '?filters%5Bstatus%5D=current', {
@@ -95,17 +106,22 @@ describe( 'Waiting source ID and proposal integrity', () => {
 		assert.equal( api.visibleId( { ...result, context: 'button' }, doc ), null );
 		assert.equal( api.visibleId( { ...result, original: 'Other', singularOriginal: 'Other' }, doc ), null );
 	} );
-	test( 'retains all distinct Waiting translation IDs without consolidating content', () => {
+	test( 'retains proposals from all translators without consolidating translation IDs', () => {
 		const api = load();
-		const rows = [ proposal( '137070872' ), proposal( '141335806' ) ];
+		const rows = [
+			proposal( '137070872', { user: { user_login: 'alice' } } ),
+			proposal( '141335806', { user: { user_login: 'bob' } } ),
+		];
 		const values = JSON.parse( JSON.stringify( api.validate( rows, {
-			id: '22606895', original: 'Hello', context: null, login: '',
+			id: '22606895', original: 'Hello', context: null,
 		} ) ) );
-		assert.deepEqual( values.map( ( item ) => item.id ), [ '137070872', '141335806' ] );
+		assert.deepEqual( values.map( ( item ) => [ item.id, item.user.user_login ] ), [
+			[ '137070872', 'alice' ], [ '141335806', 'bob' ],
+		] );
 	} );
-	test( 'rejects cross-original, status, Context, user and duplicate ID', () => {
+	test( 'rejects cross-original, status, Context and duplicate ID', () => {
 		const api = load();
-		const expect = { id: '22606895', original: 'Hello', context: null, login: 'alice' };
+		const expect = { id: '22606895', original: 'Hello', context: null };
 		for ( const changed of [
 			{ original_id: '999' }, { translation_status: 'current' }, { singular: 'Goodbye' },
 			{ context: 'menu' }, { id: 'not-an-id' },
@@ -113,12 +129,11 @@ describe( 'Waiting source ID and proposal integrity', () => {
 		] ) {
 			assert.throws( () => api.validate( [ proposal( '10', changed ) ], expect ), /対象外/u );
 		}
-		assert.throws( () => api.validate( [ proposal( '10', { user: { user_login: 'bob' } } ) ], expect ), /指定した翻訳者以外/u );
 		assert.throws( () => api.validate( [ proposal( '10' ), proposal( '10' ) ], expect ), /重複/u );
 	} );
 	test( 'retains empty and single proposal responses independently', () => {
 		const api = load();
-		const expected = { id: '22606895', original: 'Hello', context: null, login: '' };
+		const expected = { id: '22606895', original: 'Hello', context: null };
 		assert.equal( api.validate( [], expected ).length, 0 );
 		assert.equal( api.validate( [ proposal( '10' ) ], expected ).length, 1 );
 	} );
