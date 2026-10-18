@@ -2030,38 +2030,6 @@ async function wpgpt_all_page_warnings_waiting_get( url ) {
 }
 
 /**
- * 候補検索に全件性の証拠がない場合、原文 ID の自動確定を禁止する。
- *
- * JSON 配列には総件数が含まれないため、検索結果が少なくても
- * 全候補が含まれることを証明できない。その場合は別原文の誤表示を防ぐ。
- *
- * @param {Object[]} candidates 検索 API から返った候補。
- * @param {Object} result 選択された原文。
- * @returns {string} 十分な証拠がある場合のみ確定した ID。
- * @throws {Error} 現行 API の検索結果だけでは一意性を確証できない。
- */
-function wpgpt_all_page_warnings_resolve_original_id( candidates, result ) {
-	const ids = new Set();
-	let exact = 0;
-	// 一致候補だけでなく全候補の Context を確認し、区別不能な候補を見逃さない。
-	candidates.forEach( ( row ) => {
-		if ( ! row || row.singular !== ( result.singularOriginal || result.original ) ) return;
-		exact++;
-		if ( ! Object.hasOwn( row, 'context' ) ) {
-			throw new Error( '検索結果に Context がありません。原文 ID を特定できません。' );
-		}
-		if ( ( row.context || null ) !== ( result.context || null ) ) return;
-		if ( ! /^[1-9][0-9]*$/u.test( String( row.original_id ) ) ) {
-			throw new Error( '候補の原文 ID が不正です。' );
-		}
-		ids.add( String( row.original_id ) );
-	} );
-	if ( exact === 0 || ids.size !== 1 ) throw new Error( '原文・Context に一致する ID を一意に確認できません。' );
-	// 現行の配列 API は総件数を返さない。未取得ページに別 ID がないことを証明できない。
-	throw new Error( '候補 ID は見つかりましたが、検索結果の全件性を確認できません。現在の翻訳一覧に対象原文がある場合に再度お試しください。' );
-}
-
-/**
  * 同じ原文の Waiting 提案だけを翻訳 ID 単位で抽出する。
  *
  * @param {Object[]} rows JSON API の取得結果。
@@ -2113,12 +2081,9 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 		const original = result.singularOriginal || result.original;
 		const source = result.sourceUrl;
 		let id = wpgpt_all_page_warnings_visible_original_id( result );
+		// API の候補検索には総件数がないため、結果全体の一意性を確認できない場合は通信せず停止する。
 		if ( ! id ) {
-			const url = wpgpt_all_page_warnings_waiting_api_url( source, {
-				term: original,
-				term_scope: 'scope_originals',
-			} );
-			id = wpgpt_all_page_warnings_resolve_original_id( await wpgpt_all_page_warnings_waiting_get( url ), result );
+			throw new Error( '原文 ID を現在の翻訳一覧で確認できません。対象原文を GlotPress の一覧に表示してから再実行してください。' );
 		}
 		const apiUrl = wpgpt_all_page_warnings_waiting_api_url( source, {
 			original_id: id,
