@@ -95,17 +95,22 @@ function wpgpt_all_page_warnings_normalize_result( result ) {
  * @param {Set<string>} selectedRules 利用者が絞り込み対象として選択したルール識別子。
  * @returns {Object[]} 一覧表示に使用する Warning を付与した翻訳文字列。
  */
-function wpgpt_all_page_warnings_filter_results( results, selectedRules ) {
+function wpgpt_all_page_warnings_filter_results( results, selectedRules, includeWithoutWarnings = false ) {
 	// 絞り込みの有無にかかわらず、すべての結果を同じ Warning 表現へ揃えてから表示条件を適用する。
 	const normalized = results.map( wpgpt_all_page_warnings_normalize_result );
 
 	// ルール未選択時は Warning を減らさず、正規化済みの全結果を表示対象とする。
 	if ( ! selectedRules || 0 === selectedRules.size ) {
-		return normalized;
+		return normalized.filter( ( result ) => includeWithoutWarnings || result.warnings.length );
 	}
 
 	// 各翻訳文字列について選択ルールに該当する Warning だけを残し、該当文字列だけを結果集合へ含める。
 	return normalized.reduce( ( filtered, result ) => {
+		// Warning なしの Waiting は明示して許可された表示条件でのみ含める。
+		if ( includeWithoutWarnings && ! result.warnings.length ) {
+			filtered.push( result );
+			return filtered;
+		}
 		// 複数ルール選択は OR 条件とし、いずれかの選択ルールに属する Warning を表示対象とする。
 		const matching = result.displayWarnings.filter(
 			( warning ) => warning.setting && selectedRules.has( warning.setting )
@@ -153,11 +158,12 @@ function wpgpt_all_page_warnings_search_results( results, searchQuery ) {
  * @param {Object[]} results 全件確認で Warning が見つかった翻訳文字列。
  * @param {Set<string>} selectedRules 選択中の日本語翻訳ルール。
  * @param {string} searchQuery 文字列検索条件。
+ * @param {boolean} includeWithoutWarnings Waiting の正常な訳文も表示するか。
  * @returns {Object[]} 画面表示・集計・Slack コピー出力で共有する結果。
  */
-function wpgpt_all_page_warnings_apply_filters( results, selectedRules, searchQuery ) {
+function wpgpt_all_page_warnings_apply_filters( results, selectedRules, searchQuery, includeWithoutWarnings = false ) {
 	return wpgpt_all_page_warnings_search_results(
-		wpgpt_all_page_warnings_filter_results( results, selectedRules ),
+		wpgpt_all_page_warnings_filter_results( results, selectedRules, includeWithoutWarnings ),
 		searchQuery
 	);
 }
@@ -647,8 +653,8 @@ function wpgpt_all_page_warnings_parse_po( po ) {
 /**
  * 1つの PO 翻訳項目に既存の Warning 判定と日本語翻訳ルール判定を適用する。
  *
- * 未翻訳項目は確認対象数に含めず、Warning がない翻訳項目は確認済みとして扱うが
- * 結果一覧には追加しない。
+ * 未翻訳項目は確認対象数に含めず、Warning のない翻訳も Waiting の比較用に保持する。
+ * 通常の Warning 結果一覧には追加しない。
  *
  * @param {Object} entry PO から復元した1つの翻訳項目。
  * @param {string} exportUrl 全件確認に使用した PO 出力 URL。
@@ -703,12 +709,7 @@ function wpgpt_all_page_warnings_analyze_entry( entry, exportUrl ) {
 		}
 	} );
 
-	// 確認済みでも Warning がない項目は、件数には含めるが結果一覧には表示しない。
-	if ( ! warnings.length ) {
-		return {
-			result: null,
-		};
-	}
+	// Warning がない訳文も比較用に保持するが、通常の Warning 一覧には含めない。
 
 	return {
 		result: {
@@ -728,10 +729,11 @@ function wpgpt_all_page_warnings_analyze_entry( entry, exportUrl ) {
  *
  * @param {Object[]} entries PO から復元した翻訳項目。
  * @param {string} exportUrl 全件確認に使用した PO 出力 URL。
- * @returns {{results: Object[], checkedStrings: number}} Warning 結果と確認済み翻訳文字列数。
+ * @returns {{results: Object[], allResults: Object[], checkedStrings: number}} Warning 結果と確認済み翻訳文字列数。
  */
 function wpgpt_all_page_warnings_analyze_entries( entries, exportUrl ) {
 	const results = [];
+	const allResults = [];
 	let checkedStrings = 0;
 
 	// PO 内の各翻訳項目を確認し、対象外・問題なし・Warning ありを区別して集計する。
@@ -742,14 +744,16 @@ function wpgpt_all_page_warnings_analyze_entries( entries, exportUrl ) {
 			return;
 		}
 		checkedStrings++;
-		// Warning が存在する項目だけを利用者向け結果一覧へ追加する。
-		if ( analyzed.result ) {
+		allResults.push( analyzed.result );
+		// Warning ありの既存集計は変更しない。
+		if ( analyzed.result.warnings.length ) {
 			results.push( analyzed.result );
 		}
 	} );
 
 	return {
 		results,
+		allResults,
 		checkedStrings,
 	};
 }
@@ -1097,6 +1101,8 @@ async function wpgpt_all_page_warnings_copy_text( text, clipboard = navigator.cl
  */
 const wpgptAllPageWarningsState = {
 	results: [],
+	allResults: [],
+	includeWithoutWarnings: false,
 	selectedRules: new Set(),
 	searchQuery: '',
 	page: 1,
@@ -1365,7 +1371,7 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	head.appendChild( actions );
 	card.appendChild( head );
 
-	// Waiting の指摘がある原文だけ、既存集計を変えずに個別確認の入口を示す。
+	// Warning の有無にかかわらず、Waiting の各原文から複数提案を比較できるようにする。
 	if ( 'waiting' === wpgptAllPageWarningsState.status ) {
 		const compare = wpgpt_all_page_warnings_create_element( 'button', 'button', '複数の翻訳提案を確認' );
 		compare.type = 'button';
@@ -1408,7 +1414,11 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	result.displayWarnings.forEach( ( warning ) => {
 		list.appendChild( wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) );
 	} );
-	warnings.appendChild( list );
+	if ( result.displayWarnings.length ) {
+		warnings.appendChild( list );
+	} else {
+		warnings.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', 'Warning なし' ) );
+	}
 	body.append( original, translated, warnings );
 	card.appendChild( body );
 	return card;
@@ -1476,12 +1486,17 @@ function wpgpt_all_page_warnings_render_pagination( pageInfo, pagination ) {
  * @returns {void}
  */
 function wpgpt_all_page_warnings_render() {
+	const state = wpgptAllPageWarningsState;
+	const showNormal = state.status === 'waiting' && state.includeWithoutWarnings;
 	const filtered = wpgpt_all_page_warnings_apply_filters(
-		wpgptAllPageWarningsState.results,
-		wpgptAllPageWarningsState.selectedRules,
-		wpgptAllPageWarningsState.searchQuery
+		showNormal ? state.allResults : state.results,
+		state.selectedRules, state.searchQuery, showNormal
 	);
-	const summary = wpgpt_all_page_warnings_summarize( filtered );
+	// Warning と影響する文字列の集計は従来どおり Warning がある結果だけを対象にする。
+	const warningResults = wpgpt_all_page_warnings_apply_filters(
+		state.results, state.selectedRules, state.searchQuery
+	);
+	const summary = wpgpt_all_page_warnings_summarize( warningResults );
 	const pageInfo = wpgpt_all_page_warnings_paginate(
 		filtered,
 		wpgptAllPageWarningsState.page,
@@ -1502,8 +1517,9 @@ function wpgpt_all_page_warnings_render() {
 				'div',
 				'wpgpt-all-page-warnings__empty',
 				// 元の走査結果がある場合は絞り込み0件、ない場合は Warning 0件として案内を分ける。
-				wpgptAllPageWarningsState.results.length ?
-					'現在の絞り込み条件に一致する Warning はありません。' :
+				showNormal ? '現在の絞り込み条件に一致する翻訳はありません。' :
+					wpgptAllPageWarningsState.results.length ?
+						'現在の絞り込み条件に一致する Warning はありません。' :
 					'Warning は見つかりませんでした。'
 			)
 		);
@@ -1517,10 +1533,10 @@ function wpgpt_all_page_warnings_render() {
 	}
 
 	// 表示対象がない場合は範囲開始を0とし、空結果でも件数表示を自然に保つ。
-	const first = summary.strings ? pageInfo.start + 1 : 0;
-	const last = Math.min( pageInfo.start + pageInfo.items.length, summary.strings );
+	const first = filtered.length ? pageInfo.start + 1 : 0;
+	const last = Math.min( pageInfo.start + pageInfo.items.length, filtered.length );
 	wpgptAllPageWarningsState.ui.range.textContent =
-		first + '–' + last + ' / ' + summary.strings + '文字列';
+		first + '–' + last + ' / ' + filtered.length + '文字列';
 	wpgptAllPageWarningsState.ui.resultPage.textContent =
 		'結果ページ ' + pageInfo.page + ' / ' + pageInfo.totalPages;
 	wpgptAllPageWarningsState.ui.content.hidden = false;
@@ -1536,6 +1552,11 @@ function wpgpt_all_page_warnings_render() {
  */
 function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.results = [];
+	wpgptAllPageWarningsState.allResults = [];
+	wpgptAllPageWarningsState.includeWithoutWarnings = false;
+	if ( wpgptAllPageWarningsState.ui.includeWithoutWarnings ) {
+		wpgptAllPageWarningsState.ui.includeWithoutWarnings.checked = false;
+	}
 	wpgptAllPageWarningsState.selectedRules.clear();
 	wpgptAllPageWarningsState.searchQuery = '';
 	wpgptAllPageWarningsState.page = 1;
@@ -1673,6 +1694,8 @@ async function wpgpt_all_page_warnings_scan() {
 
 		const analyzed = wpgpt_all_page_warnings_analyze_entries( entries, exportUrl );
 		wpgptAllPageWarningsState.results = analyzed.results;
+		wpgptAllPageWarningsState.allResults = status === 'waiting' ? analyzed.allResults : [];
+		wpgptAllPageWarningsState.ui.includeWithoutWarningsLabel.hidden = status !== 'waiting';
 		wpgptAllPageWarningsState.checkedStrings = analyzed.checkedStrings;
 		wpgptAllPageWarningsState.resultScope = scope;
 		wpgptAllPageWarningsState.resultLogin = loginName;
@@ -1834,6 +1857,18 @@ function wpgpt_all_page_warnings_build_ui() {
 	content.appendChild( metrics );
 
 	const filters = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__filters' );
+	const includeWithoutWarningsLabel = document.createElement( 'label' );
+	includeWithoutWarningsLabel.hidden = true;
+	const includeWithoutWarnings = document.createElement( 'input' );
+	includeWithoutWarnings.type = 'checkbox';
+	includeWithoutWarnings.addEventListener( 'change', () => {
+		// PO 再取得は行わず表示条件だけを切り替える。
+		wpgptAllPageWarningsState.includeWithoutWarnings = includeWithoutWarnings.checked;
+		wpgptAllPageWarningsState.page = 1;
+		wpgptAllPageWarningsState.ui.copyStatus.textContent = '';
+		wpgpt_all_page_warnings_render();
+	} );
+	includeWithoutWarningsLabel.append( includeWithoutWarnings, document.createTextNode( ' Warning がない翻訳も表示する' ) );
 	const details = document.createElement( 'details' );
 	const summary = wpgpt_all_page_warnings_create_element( 'summary', 'button', 'ルールで絞り込む' );
 	details.appendChild( summary );
@@ -1898,7 +1933,7 @@ function wpgpt_all_page_warnings_build_ui() {
 	} );
 
 	const chips = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__chips' );
-	filters.append( details, search, copyAll, copyStatus, chips );
+	filters.append( details, includeWithoutWarningsLabel, search, copyAll, copyStatus, chips );
 	content.appendChild( filters );
 
 	const toolbar = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__toolbar' );
@@ -1948,6 +1983,8 @@ function wpgpt_all_page_warnings_build_ui() {
 		checkedCount,
 		scope,
 		ruleOptions,
+		includeWithoutWarnings,
+		includeWithoutWarningsLabel,
 		search,
 		copyAll,
 		copyStatus,
