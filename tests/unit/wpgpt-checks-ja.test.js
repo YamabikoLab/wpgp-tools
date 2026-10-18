@@ -1374,7 +1374,7 @@ describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
 		const missing = '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください';
 		assertClean( runRule( 'ja_half_full_spacing', 'Label', '項目:「設定」' ) );
 		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '項目:　設定' ), missing );
-		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '12: 30' ), missing );
+		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '12: 30' ), '1-4 半角文字と全角文字の間のスペース: 「:」の後のスペースは不要です' );
 		assertClean( runRule( 'ja_half_full_spacing', 'Label', '件数: 10' ) );
 	} );
 
@@ -1395,8 +1395,19 @@ describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
 	test( 'numeric separator spacing is checked on both sides of a colon', () => {
 		const result = runRule( 'ja_half_full_spacing', 'Label', '12 : 30' );
 		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の前のスペースは不要です' );
-		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後のスペースは不要です' );
 		assertClean( runAll( '12:30' ) );
+	} );
+
+	/**
+	 * 数字区切りと通常のコロンの違反が混在する場合も、
+	 * 利用者へ相反する空白修正を案内しないことを確認する。
+	 */
+	test( 'numeric and ordinary colon messages remain distinct', () => {
+		const result = runRule( 'ja_half_full_spacing', 'Label', '時刻12: 30、件数:10' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後のスペースは不要です' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+		assertClean( runAll( '時刻12:30、件数: 10' ) );
 	} );
 
 	/**
