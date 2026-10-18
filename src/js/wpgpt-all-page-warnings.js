@@ -2172,7 +2172,7 @@ async function wpgpt_all_page_warnings_waiting_get( url ) {
  * 同じ原文の Waiting 提案だけを翻訳 ID 単位で抽出する。
  *
  * @param {Object[]} rows JSON API の取得結果。
- * @param {Object} expected 元の PO 結果と確定済み原文 ID。
+ * @param {Object} expected 元の PO 結果と確定済み原文 ID。翻訳者で絞り込まず全提案を確認する。
  * @returns {Object[]} 重複のない個別提案。
  */
 function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
@@ -2186,9 +2186,6 @@ function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
 			! /^[1-9][0-9]*$/u.test( String( row.id ) ) ||
 			! Array.isArray( row.translations ) || ! row.translations.every( ( value ) => typeof value === 'string' ) ) {
 			throw new Error( '対象外の提案、または不正な翻訳データが API に含まれています。' );
-		}
-		if ( expected.login && row.user?.user_login !== expected.login ) {
-			throw new Error( '指定した翻訳者以外の提案が含まれています。' );
 		}
 		if ( ids.has( String( row.id ) ) ) throw new Error( '同じ翻訳 ID が重複しています。' );
 		ids.add( String( row.id ) );
@@ -2215,8 +2212,7 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 	const originalLabel = button.textContent;
 	button.textContent = '提案を取得しています…';
 	try {
-		// 取得条件が後から変更されても、異なるスキャン結果へ提案を取り違えない。
-		const login = wpgptAllPageWarningsState.resultLogin || '';
+		// 個別比較は全翻訳者を対象とし、走査時の翻訳者条件を引き継がない。
 		const original = result.singularOriginal || result.original;
 		const source = result.sourceUrl;
 		let id = wpgpt_all_page_warnings_visible_original_id( result );
@@ -2224,13 +2220,10 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 		if ( ! id ) {
 			id = await wpgpt_all_page_warnings_find_waiting_original_id( source, result );
 		}
-		const apiUrl = wpgpt_all_page_warnings_waiting_api_url( source, {
-			original_id: id,
-			user_login: login,
-		} );
+		const apiUrl = wpgpt_all_page_warnings_waiting_api_url( source, { original_id: id } );
 		const proposals = wpgpt_all_page_warnings_validate_proposals(
 			await wpgpt_all_page_warnings_waiting_get( apiUrl ),
-			{ id, original, context: result.context || null, login }
+			{ id, original, context: result.context || null }
 		);
 		const settings = Object.entries( wpgpt_settings )
 			.filter( ( [ , value ] ) => typeof value?.state === 'string' )
@@ -2249,7 +2242,7 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 			detail: {
 				kind: 'wpgpt-waiting-proposals-v1',
 				payload: { setUrl: new URL( source ).origin + new URL( source ).pathname,
-					original, context: result.context || null, login, locale, id, proposals, settings },
+					original, context: result.context || null, locale, id, proposals, settings },
 			},
 		} ) );
 		button.textContent = '専用タブを開いています…';
