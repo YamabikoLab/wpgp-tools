@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!-- Waiting の複数提案を読み取り専用で比較する拡張機能画面。 -->
+<html lang="ja">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Waiting の翻訳提案を比較 | WPGP Tools</title>
+	<link rel="stylesheet" href="css/wpgpt-waiting-proposals.css">
+	<script defer src="js/wpgpt-waiting-proposals-bootstrap.js"></script>
+	<script defer src="js/wpgpt-functions.js"></script>
+	<script defer src="js/wpgpt-settings.js"></script>
+	<script defer src="js/wpgpt-waiting-proposals.js"></script>
+</head>
+<body>
+	<main>
+		<h1>Waiting の翻訳提案を比較</h1>
+		<p>この画面は読み取り専用です。既存の PO スキャン結果と合算せず、取得した提案のみを表示します。</p>
+		<p id="waiting-status" role="status" aria-live="polite">取得情報を確認しています…</p>
+		<div id="waiting-results"></div>
+	</main>
+</body>
+</html>
