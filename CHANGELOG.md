@@ -5,6 +5,11 @@
 - Use only the explicitly selected status and optional proposer login for each PO export; existing page search filters no longer apply
 - Allow translator filtering for Current and Waiting; retrieve contributor candidates only on first use and retain manual login entry
 - Clarify that PO exports may omit multiple Waiting proposals and must not be described as a verified complete scan
+- Add a dedicated read-only comparison tab for multiple Waiting translation proposals
+- Display individual proposals by translation ID, including contributor information, Warnings, and Notices
+- Allow Waiting translations without Warnings to be included in scan results without affecting Warning counts
+- Resolve original IDs using the current GlotPress page or a single filtered HTML request, with strict validation
+- Limit proposal retrieval to explicit user actions and document potential API pagination limitations
 
 # 2.3.0
 12.10.2026

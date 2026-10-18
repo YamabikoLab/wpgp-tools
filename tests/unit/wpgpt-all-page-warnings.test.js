@@ -42,6 +42,10 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 		URL,
 		wpgpt_settings: settings,
 		wpgpt_is_japanese_locale: () => japaneseLocale,
+		wpgpt_run_checks: ( original, translation ) => ( {
+			warning: translation.includes( 'BROKEN' ) ? [ { textContent: 'Broken translation' } ] : [],
+			notice: [],
+		} ),
 	} );
 
 	const defaultRule = ( setting, styleGuideItem, message, matches = [] ) => () => [ {
@@ -107,6 +111,7 @@ function loadAllPageWarnings( { jaEnabled = true, japaneseLocale = true } = {} )
 			buildSourceUrl: wpgpt_all_page_warnings_build_source_url,
 			isPo: wpgpt_all_page_warnings_is_po,
 			parsePo: wpgpt_all_page_warnings_parse_po,
+			analyzeEntries: wpgpt_all_page_warnings_analyze_entries,
 			translationStyleGuideUrl: WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_URL,
 			translationStyleGuideUpdatedAt: WPGPT_JAPANESE_TRANSLATION_STYLE_GUIDE_UPDATED_AT,
 		})`,
@@ -825,5 +830,47 @@ describe( 'unsaved translation detection', () => {
 		const api = loadAllPageWarnings();
 
 		assert.equal( api.hasUnsavedTranslations( rootWithTextareas( [] ) ), false );
+	} );
+} );
+
+describe( 'Waiting comparison access for Warning-free PO entries', () => {
+	const exportUrl = 'https://translate.wordpress.org/projects/wp-plugins/echo-knowledge-base/stable/ja/default/export-translations/?format=po&filters%5Bstatus%5D=waiting';
+	const original = '%1$s trend of article views over the last %2$s';
+
+	test( 'retains clean translations for optional display without changing Warning counts', () => {
+		const api = loadAllPageWarnings();
+		const entries = [
+			{ msgid: original, msgidPlural: null, context: null, translations: [ '%2$s期間の%1$s記事閲覧数の傾向' ] },
+			{ msgid: 'Second entry', msgidPlural: null, context: null, translations: [ 'BROKEN' ] },
+			{ msgid: 'Untranslated', msgidPlural: null, context: null, translations: [ '' ] },
+		];
+		const analyzed = api.analyzeEntries( entries, exportUrl );
+		assert.equal( analyzed.checkedStrings, 2 );
+		assert.equal( analyzed.results.length, 1 );
+		assert.equal( analyzed.allResults.length, 2 );
+		assert.equal( analyzed.allResults[ 0 ].warnings.length, 0 );
+		assert.equal( analyzed.allResults[ 0 ].singularOriginal, original );
+		assert.match( analyzed.allResults[ 0 ].sourceUrl, /filters%5Bterm%5D=/u );
+
+		const initial = api.applyFilters( analyzed.allResults, new Set(), '' );
+		assert.equal( initial.length, 1 );
+		const withClean = api.applyFilters( analyzed.allResults, new Set(), '', true );
+		assert.equal( withClean.length, 2 );
+		assert.equal( api.summarize( api.applyFilters( analyzed.results, new Set(), '' ) ).warnings, 1 );
+		assert.deepEqual( normalize( api.applyFilters( analyzed.allResults, new Set(), original, true )
+			.map( ( item ) => item.original ) ), [ original ] );
+		assert.equal( api.normalizeResult( withClean[ 0 ] ).displayWarnings.length, 0 );
+	} );
+
+	test( 'rule filters preserve their Warning behavior while allowing clean Waiting items explicitly', () => {
+		const api = loadAllPageWarnings();
+		const all = [ ...sampleResults(), {
+			id: 'clean', original: 'Clean', context: null, translations: [ '正常' ],
+			warnings: [], japaneseFindings: [],
+		} ];
+		assert.equal( api.applyFilters( all, new Set( [ 'ja_punctuation' ] ), '' ).length, 1 );
+		const shown = api.applyFilters( all, new Set( [ 'ja_punctuation' ] ), '', true );
+		assert.deepEqual( normalize( shown.map( ( item ) => item.id ) ), [ '102', 'clean' ] );
+		assert.equal( api.applyFilters( all, new Set(), 'unknown', true ).length, 0 );
 	} );
 } );
