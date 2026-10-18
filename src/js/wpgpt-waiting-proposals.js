@@ -118,7 +118,8 @@
 		// 比較タブには翻訳一覧が存在しないため、全件確認機能は自動起動しない。
 		await loadChecks( 'js/wpgpt-all-page-warnings.js' );
 
-		results.append( element( 'p', '翻訳者条件: ' + ( data.login || 'すべての翻訳者' ) ) );
+		// 個別比較では全提案を対象とするため、元の走査条件にかかわらず固定表示する。
+		results.append( element( 'p', '翻訳者条件: すべての翻訳者' ) );
 		results.append( element( 'p', 'Context: ' + ( data.context || 'なし' ) ) );
 		const note = element( 'p', '取得結果: ' + data.proposals.length + '件。API のページングにより全提案が含まれない可能性があります。' );
 		note.className = 'waiting-note';
