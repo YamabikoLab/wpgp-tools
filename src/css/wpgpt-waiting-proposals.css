@@ -1,13 +1,62 @@
-/* Waiting の提案を読み取り専用で比較する画面の表示。 */
-body { margin: 0; background: #f6f7f7; color: #1d2327; font: 16px/1.6 system-ui,sans-serif; }
-main { max-width: 960px; margin: 32px auto; padding: 0 18px 48px; }
-h1 { font-size: 1.7rem; }
-#waiting-status { border-left: 4px solid #2271b1; padding: 10px 14px; background: #fff; }
-#waiting-status[hidden] { display: none; }
-.waiting-card { background: #fff; border: 1px solid #dcdcde; border-radius: 6px; padding: 20px; margin: 18px 0; }
-.waiting-card h2 { margin-top: 0; font-size: 1.2rem; }
-.waiting-card pre, .waiting-source pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f6f7f7; padding: 12px; border-radius: 4px; }
-.waiting-card ul { padding-left: 1.5em; }
-.waiting-source { padding: 8px 0; }
-.waiting-note { color: #664d00; }
-:focus-visible { outline: 3px solid #2271b1; outline-offset: 3px; }
+/*
+ * Waiting の比較タブを元の Warning 結果に合わせて表示する。
+ * 既存の結果カードと指摘強調のデザインを再利用し、専用タブ固有の余白だけを調整する。
+ */
+body {
+	margin: 0;
+	background: #f6f7f7;
+	color: #1d2327;
+	font: 16px/1.6 system-ui, sans-serif;
+}
+main {
+	max-width: 1200px;
+	margin: 24px auto;
+	padding: 0 18px 48px;
+}
+h1 {
+	font-size: 1.7rem;
+}
+#waiting-status {
+	border-left: 4px solid #2271b1;
+	padding: 10px 14px;
+	background: #fff;
+}
+#waiting-status[hidden] {
+	display: none;
+}
+#waiting-results .wpgpt-all-page-warnings__card {
+	margin: 12px 0;
+}
+#waiting-results .wpgpt-all-page-warnings__card-head {
+	justify-content: space-between;
+}
+#waiting-results .wpgpt-all-page-warnings__field > div {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+#waiting-results .wpgpt-all-page-warnings__translation + small,
+#waiting-results .wpgpt-all-page-warnings__field > small {
+	display: block;
+	margin-top: 8px;
+}
+#waiting-results .wpgpt-all-page-warnings__warnings > p {
+	margin: 2px 0 8px;
+}
+.waiting-note {
+	color: #664d00;
+}
+.waiting-notice {
+	margin-top: 6px;
+	padding: 6px 8px;
+	border-left: 4px solid #72aee6;
+	background: #f0f6fc;
+}
+:focus-visible {
+	outline: 3px solid #2271b1;
+	outline-offset: 3px;
+}
+@media (max-width: 680px) {
+	#waiting-results .wpgpt-all-page-warnings__card-body {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
