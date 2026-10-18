@@ -29,7 +29,8 @@
 			"js": [
 				"js/init.js",
 				"js/wpgpt-functions.js",
-				"js/wpgpt-consistency.js"
+				"js/wpgpt-consistency.js",
+				"js/wpgpt-waiting-proposals-bridge.js"
 			],
 			"css": [
 				"css/wpgpt-style.css",
@@ -45,5 +46,8 @@
 		"16": "img/icon-16.png",
 		"48": "img/icon-48.png",
 		"128": "img/icon-128.png"
+	},
+	"background": {
+		"service_worker": "js/wpgpt-waiting-proposals-background.js"
 	}
 }
