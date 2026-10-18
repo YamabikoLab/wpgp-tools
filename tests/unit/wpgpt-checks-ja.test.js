@@ -1315,3 +1315,76 @@ describe( 'Japanese v1 match ranges', () => {
 		assert.deepEqual( findings[ 0 ].matches, [] );
 	} );
 } );
+
+/**
+ * 翻訳スタイルガイドの暫定解釈（#46・#47）について、
+ * 複数ルールを同時に有効にした場合も矛盾する警告が出ないことを確認する。
+ * 既存の単独ルールの試験は繰り返さず、競合しやすい境界を対象とする。
+ */
+describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
+	const runAll = ( translated ) => checks.runJapaneseChecks(
+		'Label',
+		translated,
+		Object.fromEntries( JAPANESE_RULE_SETTINGS.map( ( key ) => [ key, 'warning' ] ) )
+	);
+
+	/**
+	 * コロンと丸括弧の専用規則に従った表記では、
+	 * 全ルール適用時にも修正を要求しないことを確認する。
+	 */
+	test( 'accepted punctuation boundaries are clean with all rules enabled', () => {
+		for ( const value of [
+			'項目:「設定」',
+			'項目:『設定』',
+			'設定 (詳細): 値',
+			'「項目」(補足)',
+			'WordPress 6.8 (推奨)',
+			'件数: 10',
+			'12:30',
+			'2:3',
+		] ) {
+			assertClean( runAll( value ) );
+		}
+	} );
+
+	/**
+	 * コロン・丸括弧の外側に不要な空白を置いた場合は警告され、
+	 * 正しい表記へ修正すれば警告が解消することを確認する。
+	 */
+	test( 'invalid punctuation boundaries report warnings that disappear after correction', () => {
+		for ( const [ incorrect, corrected ] of [
+			[ '項目: 「設定」', '項目:「設定」' ],
+			[ '設定 (詳細) : 値', '設定 (詳細): 値' ],
+			[ 'WordPress 6.8(推奨)', 'WordPress 6.8 (推奨)' ],
+			[ '件数:10', '件数: 10' ],
+			[ '12: 30', '12:30' ],
+			[ '2: 3', '2:3' ],
+			[ '設定 ( 詳細 )', '設定 (詳細)' ],
+		] ) {
+			assert.ok( runAll( incorrect ).warning.length > 0, incorrect );
+			assertClean( runAll( corrected ) );
+		}
+	} );
+
+	/**
+	 * 通常のコロン後では半角スペースだけを認め、
+	 * かぎ括弧直前では空白を認めないことを確認する。
+	 */
+	test( 'colon exceptions and full-width spacing are handled by rule 1-4', () => {
+		const missing = '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください';
+		assertClean( runRule( 'ja_half_full_spacing', 'Label', '項目:「設定」' ) );
+		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '項目:　設定' ), missing );
+		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '12: 30' ), missing );
+		assertClean( runRule( 'ja_half_full_spacing', 'Label', '件数: 10' ) );
+	} );
+
+	/**
+	 * 警告と通知の設定変更によって、専用ルールの指摘内容が
+	 * 消失したり誤った重要度に振り分けられたりしないことを確認する。
+	 */
+	test( 'colon spacing findings respect notice severity', () => {
+		const result = runRule( 'ja_half_full_spacing', 'Label', '項目:　設定', 'notice' );
+		assert.deepEqual( result.warning, [] );
+		assertNotice( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+	} );
+} );
