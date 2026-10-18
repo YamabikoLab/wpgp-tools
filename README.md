@@ -273,3 +273,12 @@ See this README for the YamabikoLab edition.
 
 ### Contributions
 Contributions are welcome, bugreports, suggestions and even pull requests! No limitations, shoot for the stars!
+
+## Waiting 提案の個別比較（YamabikoLab 版）
+
+翻訳セットで全件 Warning チェックの対象を **Waiting** にして走査すると、Warning が検出された原文に「複数の翻訳提案を確認」ボタンが表示されます。クリックすると同じ原文 ID の Waiting 提案を翻訳 ID ごとに専用タブで読み取り専用表示し、既存の Warning 判定と日本語ルールで確認できます。翻訳や承認状態は変更しません。
+
+- API 通信はボタン操作時のみです。原文 ID の検索が必要な場合は最大1回、Waiting の取得に最大1回の GET を行い、再試行・全件巡回は行いません。
+- PO に原文 ID がない場合、現在の翻訳一覧に同じ原文・Context の行が確認できるときだけ原文 ID を使用します。API 検索結果だけでは全候補の取得を保証できない場合、**誤表示防止のため確認を中止**します。
+- 専用タブに表示される件数は API 応答に含まれる提案の件数です。**Waiting 全件の網羅を意味しません**。既存の PO 走査結果にも合算しません。
+- 設定は元の翻訳画面から一時的に渡され、URL や永続ストレージには保存されません。再読み込み後は元の画面から再度開いてください。
