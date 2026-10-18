@@ -108,11 +108,12 @@ describe( 'Waiting source ID and proposal integrity', () => {
 		const expect = { id: '22606895', original: 'Hello', context: null, login: 'alice' };
 		for ( const changed of [
 			{ original_id: '999' }, { translation_status: 'current' }, { singular: 'Goodbye' },
-			{ context: 'menu' }, { user: { user_login: 'bob' } }, { id: 'not-an-id' },
+			{ context: 'menu' }, { id: 'not-an-id' },
 			{ translations: [ 20 ] },
 		] ) {
 			assert.throws( () => api.validate( [ proposal( '10', changed ) ], expect ), /対象外/u );
 		}
+		assert.throws( () => api.validate( [ proposal( '10', { user: { user_login: 'bob' } } ) ], expect ), /指定した翻訳者以外/u );
 		assert.throws( () => api.validate( [ proposal( '10' ), proposal( '10' ) ], expect ), /重複/u );
 	} );
 	test( 'retains empty and single proposal responses independently', () => {
