@@ -713,6 +713,7 @@ function wpgpt_all_page_warnings_analyze_entry( entry, exportUrl ) {
 	return {
 		result: {
 			context: entry.context,
+			singularOriginal,
 			sourceUrl: wpgpt_all_page_warnings_build_source_url( exportUrl, singularOriginal ),
 			original: originalForms.join( '\n' ),
 			translations: entry.translations,
@@ -1364,6 +1365,14 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	head.appendChild( actions );
 	card.appendChild( head );
 
+	// Waiting の指摘がある原文だけ、既存集計を変えずに個別確認の入口を示す。
+	if ( 'waiting' === wpgptAllPageWarningsState.status ) {
+		const compare = wpgpt_all_page_warnings_create_element( 'button', 'button', '複数の翻訳提案を確認' );
+		compare.type = 'button';
+		compare.addEventListener( 'click', () => wpgpt_all_page_warnings_open_waiting( result, compare ) );
+		actions.appendChild( compare );
+	}
+
 	const body = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__card-body' );
 	const original = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__field' );
 	original.append(
@@ -1532,6 +1541,7 @@ function wpgpt_all_page_warnings_reset_results() {
 	wpgptAllPageWarningsState.page = 1;
 	wpgptAllPageWarningsState.checkedStrings = 0;
 	wpgptAllPageWarningsState.resultScope = '';
+	wpgptAllPageWarningsState.resultLogin = '';
 	wpgptAllPageWarningsState.ui.content.hidden = true;
 	// 検索欄が構築済みの場合だけ表示値も初期化し、再走査時に前回条件を持ち越さない。
 	if ( wpgptAllPageWarningsState.ui.search ) {
@@ -1665,6 +1675,7 @@ async function wpgpt_all_page_warnings_scan() {
 		wpgptAllPageWarningsState.results = analyzed.results;
 		wpgptAllPageWarningsState.checkedStrings = analyzed.checkedStrings;
 		wpgptAllPageWarningsState.resultScope = scope;
+		wpgptAllPageWarningsState.resultLogin = loginName;
 
 		wpgpt_all_page_warnings_set_status(
 			'✓ ' + scope + ': ' + wpgptAllPageWarningsState.checkedStrings + '件を確認しました。',
@@ -1949,6 +1960,192 @@ function wpgpt_all_page_warnings_build_ui() {
 	};
 
 	return root;
+}
+
+/**
+ * 表示済み GlotPress 行の原文と Context が一致する場合のみ原文 ID を返す。
+ *
+ * 画面上の行 ID は GlotPress が発行した識別子であり、同じ検索文字列の
+ * 別 Context やページ外候補から ID を推測する必要がない場合に限り使用する。
+ *
+ * @param {Object} result 元の PO 全件確認で選択した翻訳文字列。
+ * @param {Document} pageDocument GlotPress 翻訳画面。
+ * @returns {string|null} 1種類と確認できた原文 ID。未確認は null。
+ */
+function wpgpt_all_page_warnings_visible_original_id( result, pageDocument = document ) {
+	const original = result.singularOriginal || result.original;
+	const ids = new Set();
+	// 画面に存在する翻訳行だけを照合し、別 Context の原文 ID を使わない。
+	pageDocument.querySelectorAll( '#translations tr.preview[id^="preview-"]' ).forEach( ( preview ) => {
+		const id = preview.id.match( /^preview-([1-9][0-9]*)-(?:[0-9]+)$/u );
+		if ( ! id ) return;
+		const editor = pageDocument.getElementById( preview.id.replace( /^preview-/u, 'editor-' ) );
+		const raw = editor?.querySelector( '.original_raw' )?.textContent;
+		const displayed = preview.querySelector( '.original-text' )?.textContent;
+		const text = typeof raw === 'string' ? raw : displayed;
+		const context = preview.querySelector( '.context' )?.textContent || null;
+		if ( text === original && context === ( result.context || null ) ) ids.add( id[ 1 ] );
+	} );
+	return ids.size === 1 ? [ ...ids ][ 0 ] : null;
+}
+
+/**
+ * 個別確認に使う安全な GlotPress API の URL を作る。
+ *
+ * @param {string} sourceUrl PO の対象翻訳セットから生成された元画面の URL。
+ * @param {Object} filters 原文検索または特定原文の Waiting 取得条件。
+ * @returns {string} 読み取り専用の JSON API URL。
+ */
+function wpgpt_all_page_warnings_waiting_api_url( sourceUrl, filters ) {
+	const url = new URL( sourceUrl );
+	if ( url.origin !== 'https://translate.wordpress.org' ||
+		! /^\\/projects\\/(?:[a-z0-9_.-]+\\/)+[a-z0-9_-]+\\/[a-z0-9_-]+\\/?$/iu.test( url.pathname ) ) {
+		throw new Error( '翻訳セットの URL が不正です。' );
+	}
+	url.pathname = '/api' + url.pathname.replace( /\\/$/u, '' ) + '/';
+	url.search = '';
+	url.hash = '';
+	url.searchParams.set( 'filters[status]', 'waiting' );
+	Object.entries( filters ).forEach( ( [ key, value ] ) => {
+		if ( value ) url.searchParams.set( 'filters[' + key + ']', value );
+	} );
+	return url.href;
+}
+
+/**
+ * 指定した原文1件の JSON API を1回だけ読み込む。
+ *
+ * @param {string} url 検証済みの取得先。
+ * @returns {Promise<Object[]>} 応答に含まれる翻訳配列。
+ */
+async function wpgpt_all_page_warnings_waiting_get( url ) {
+	const response = await fetch( url, { method: 'GET', credentials: 'same-origin', redirect: 'error' } );
+	if ( ! response.ok ) throw new Error( 'HTTP ' + response.status );
+	if ( ! /application\\/json/iu.test( response.headers.get( 'content-type' ) || '' ) ) {
+		throw new Error( 'GlotPress API が JSON を返しませんでした。' );
+	}
+	const data = await response.json();
+	if ( ! Array.isArray( data ) ) throw new Error( 'GlotPress API の応答形式が不正です。' );
+	return data;
+}
+
+/**
+ * 候補検索に全件性の証拠がない場合、原文 ID の自動確定を禁止する。
+ *
+ * JSON 配列には総件数が含まれないため、検索結果が少なくても
+ * 全候補が含まれることを証明できない。その場合は別原文の誤表示を防ぐ。
+ *
+ * @param {Object[]} candidates 検索 API から返った候補。
+ * @param {Object} result 選択された原文。
+ * @returns {string} 十分な証拠がある場合のみ確定した ID。
+ * @throws {Error} 現行 API の検索結果だけでは一意性を確証できない。
+ */
+function wpgpt_all_page_warnings_resolve_original_id( candidates, result ) {
+	const ids = new Set();
+	let exact = 0;
+	// 一致候補だけでなく全候補の Context を確認し、区別不能な候補を見逃さない。
+	candidates.forEach( ( row ) => {
+		if ( ! row || row.singular !== ( result.singularOriginal || result.original ) ) return;
+		exact++;
+		if ( ! Object.hasOwn( row, 'context' ) ) {
+			throw new Error( '検索結果に Context がありません。原文 ID を特定できません。' );
+		}
+		if ( ( row.context || null ) !== ( result.context || null ) ) return;
+		if ( ! /^[1-9][0-9]*$/u.test( String( row.original_id ) ) ) {
+			throw new Error( '候補の原文 ID が不正です。' );
+		}
+		ids.add( String( row.original_id ) );
+	} );
+	if ( exact === 0 || ids.size !== 1 ) throw new Error( '原文・Context に一致する ID を一意に確認できません。' );
+	// 現行の配列 API は総件数を返さない。未取得ページに別 ID がないことを証明できない。
+	throw new Error( '候補 ID は見つかりましたが、検索結果の全件性を確認できません。現在の翻訳一覧に対象原文がある場合に再度お試しください。' );
+}
+
+/**
+ * 同じ原文の Waiting 提案だけを翻訳 ID 単位で抽出する。
+ *
+ * @param {Object[]} rows JSON API の取得結果。
+ * @param {Object} expected 元の PO 結果と確定済み原文 ID。
+ * @returns {Object[]} 重複のない個別提案。
+ */
+function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
+	const ids = new Set();
+	// サーバーが指定フィルターと異なる内容を返した場合は、結果を部分的にも利用しない。
+	return rows.map( ( row ) => {
+		if ( ! row || String( row.original_id ) !== expected.id ||
+			( row.translation_status ?? row.status ) !== 'waiting' ||
+			row.singular !== expected.original ||
+			! Object.hasOwn( row, 'context' ) || ( row.context || null ) !== expected.context ||
+			! /^[1-9][0-9]*$/u.test( String( row.id ) ) ||
+			! Array.isArray( row.translations ) || ! row.translations.every( ( value ) => typeof value === 'string' ) ) {
+			throw new Error( '対象外の提案、または不正な翻訳データが API に含まれています。' );
+		}
+		if ( expected.login && row.user?.user_login !== expected.login ) {
+			throw new Error( '指定した翻訳者以外の提案が含まれています。' );
+		}
+		if ( ids.has( String( row.id ) ) ) throw new Error( '同じ翻訳 ID が重複しています。' );
+		ids.add( String( row.id ) );
+		return {
+			id: String( row.id ),
+			original_id: String( row.original_id ),
+			plural: typeof row.plural === 'string' ? row.plural : null,
+			translations: row.translations,
+			user: { user_login: row.user?.user_login || null },
+		};
+	} );
+}
+
+/**
+ * Waiting 結果の個別原文を読み取り専用で取得して新しいタブへ引き渡す。
+ *
+ * @param {Object} result 全件確認結果の対象原文。
+ * @param {HTMLButtonElement} button 明示操作を行ったボタン。
+ * @returns {Promise<void>} タブ起動要求の完了。
+ */
+async function wpgpt_all_page_warnings_open_waiting( result, button ) {
+	if ( button.disabled || wpgptAllPageWarningsState.status !== 'waiting' ) return;
+	button.disabled = true;
+	const originalLabel = button.textContent;
+	button.textContent = '提案を取得しています…';
+	try {
+		// 取得条件が後から変更されても、異なるスキャン結果へ提案を取り違えない。
+		const login = wpgptAllPageWarningsState.resultLogin || '';
+		const original = result.singularOriginal || result.original;
+		const source = result.sourceUrl;
+		let id = wpgpt_all_page_warnings_visible_original_id( result );
+		if ( ! id ) {
+			const url = wpgpt_all_page_warnings_waiting_api_url( source, {
+				term: original,
+				term_scope: 'scope_originals',
+			} );
+			id = wpgpt_all_page_warnings_resolve_original_id( await wpgpt_all_page_warnings_waiting_get( url ), result );
+		}
+		const apiUrl = wpgpt_all_page_warnings_waiting_api_url( source, {
+			original_id: id,
+			user_login: login,
+		} );
+		const proposals = wpgpt_all_page_warnings_validate_proposals(
+			await wpgpt_all_page_warnings_waiting_get( apiUrl ),
+			{ id, original, context: result.context || null, login }
+		);
+		const settings = Object.entries( wpgpt_settings )
+			.filter( ( [ , value ] ) => typeof value?.state === 'string' )
+			.map( ( [ key, value ] ) => [ key, value.state ] );
+		const locale = new URL( source ).pathname.split( '/' ).filter( Boolean ).at( -2 );
+		// 判定データを URL や保存領域へ書かず、拡張機能の content script へ明示的に渡す。
+		document.dispatchEvent( new CustomEvent( 'wpgpt-waiting-proposals-open', {
+			detail: {
+				kind: 'wpgpt-waiting-proposals-v1',
+				payload: { setUrl: new URL( source ).origin + new URL( source ).pathname,
+					original, context: result.context || null, login, locale, id, proposals, settings },
+			},
+		} ) );
+		button.textContent = '専用タブを開いています…';
+	} catch ( error ) {
+		wpgpt_all_page_warnings_set_status( '個別確認を開始できません: ' + error.message, 'error' );
+		button.textContent = originalLabel;
+		button.disabled = false;
+	}
 }
 
 /**
