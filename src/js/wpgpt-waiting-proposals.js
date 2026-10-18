@@ -74,11 +74,15 @@
 			japaneseFindings.push( ...checked.findings );
 			checked.notices.forEach( ( notice ) => notices.push( { form, text: notice.textContent } ) );
 		} );
+		// 翻訳 ID まで絞り込むことで、比較した提案を GlotPress 側で見失わないようにする。
+		const sourceUrl = new URL( data.setUrl );
+		sourceUrl.searchParams.set( 'filters[status]', 'waiting' );
+		sourceUrl.searchParams.set( 'filters[translation_id]', proposal.id );
 		const result = wpgpt_all_page_warnings_normalize_result( {
 			original: data.original,
 			context: data.context,
 			translations: proposal.translations,
-			sourceUrl: data.setUrl,
+			sourceUrl: sourceUrl.href,
 			warnings,
 			japaneseFindings,
 		} );
