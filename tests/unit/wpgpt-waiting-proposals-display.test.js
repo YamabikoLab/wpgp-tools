@@ -15,12 +15,13 @@ class Node {
 		this.textContent = text;
 		this.children = [];
 		this.className = '';
+		this.attributes = {};
 	}
 	append( ...items ) { this.children.push( ...items ); }
 	appendChild( node ) { this.append( node ); return node; }
 	replaceChildren( ...items ) { this.children = items; }
 	addEventListener() {}
-	setAttribute() {}
+	setAttribute( name, value ) { this.attributes[ name ] = value; }
 }
 
 test( 'Waiting card uses Japanese 1-4 badge and highlights the violating text', async () => {
@@ -80,6 +81,14 @@ test( 'Waiting card uses Japanese 1-4 badge and highlights the violating text', 
 	walk( results );
 	assert.ok( all.some( ( node ) => node.textContent === '1-4' && node.className.includes( '__badge' ) ) );
 	assert.ok( all.some( ( node ) => node.tag === 'mark' && node.textContent === 'Iが' ) );
-	assert.ok( all.some( ( node ) => node.textContent.includes( 'Warning 1件' ) ) );
+	assert.ok( all.some( ( node ) => node.textContent === 'Warnings' ) );
+	assert.ok( all.some( ( node ) => node.textContent === '提案者: echoplugins' ) );
+	const actionLabels = all.filter( ( node ) => node.tag === 'a' || node.tag === 'button' ).map( ( node ) => node.textContent );
+	assert.ok( actionLabels.includes( 'GlotPressで確認' ) );
+	assert.ok( actionLabels.includes( '翻訳スタイルガイド' ) );
+	assert.ok( actionLabels.includes( 'この指摘をコピー' ) );
+	assert.ok( ! actionLabels.includes( '複数の翻訳提案を確認' ) );
+	const glotPress = all.find( ( node ) => node.tag === 'a' && node.textContent === 'GlotPressで確認' );
+	assert.match( glotPress.href, /filters%5Btranslation_id%5D=143760185/u );
 	assert.match( status.textContent, /読み取り専用/u );
 } );
