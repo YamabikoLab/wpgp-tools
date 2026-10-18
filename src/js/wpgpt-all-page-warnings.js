@@ -2132,6 +2132,14 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 			.filter( ( [ , value ] ) => typeof value?.state === 'string' )
 			.map( ( [ key, value ] ) => [ key, value.state ] );
 		const locale = new URL( source ).pathname.split( '/' ).filter( Boolean ).at( -2 );
+		// タブ起動の成否を受け取り、成功時にも同じ原文を再び確認できる状態へ戻す。
+		document.addEventListener( 'wpgpt-waiting-proposals-open-result', ( event ) => {
+			button.disabled = false;
+			button.textContent = originalLabel;
+			if ( event.detail?.error ) {
+				wpgpt_all_page_warnings_set_status( '専用タブを開けませんでした: ' + event.detail.error, 'error' );
+			}
+		}, { once: true } );
 		// 判定データを URL や保存領域へ書かず、拡張機能の content script へ明示的に渡す。
 		document.dispatchEvent( new CustomEvent( 'wpgpt-waiting-proposals-open', {
 			detail: {
