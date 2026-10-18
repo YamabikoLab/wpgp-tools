@@ -426,6 +426,11 @@
 	margin-left: auto;
 }
 
+/* 読み込み中のプルダウンで矢印画像を繰り返さない。 */
+.wpgpt-all-page-warnings select:disabled {
+    background-repeat: no-repeat !important;
+}
+
 @media (max-width: 760px) {
 	.wpgpt-all-page-warnings__search {
 		width: 100%;
