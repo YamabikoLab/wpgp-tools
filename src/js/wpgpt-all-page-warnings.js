@@ -1344,14 +1344,19 @@ function wpgpt_all_page_warnings_warning_item( warning, multipleForms, result ) 
  * 1つの翻訳文字列について、原文・訳文・Warning・関連する確認導線をまとめた結果カードを作成する。
  *
  * @param {Object} result 表示対象の全件確認結果。
+ * @param {Object} options 比較画面固有の見出し・提案者情報・通知を指定する任意設定。
  * @returns {HTMLElement} 結果一覧へ追加するカード。
  */
-function wpgpt_all_page_warnings_result_card( result ) {
+function wpgpt_all_page_warnings_result_card( result, options = {} ) {
 	const card = wpgpt_all_page_warnings_create_element( 'article', 'wpgpt-all-page-warnings__card' );
 	const head = wpgpt_all_page_warnings_create_element( 'div', 'wpgpt-all-page-warnings__card-head' );
 	// 文脈付き翻訳では文脈を見出しに示し、同じ原文の別用途を区別できるようにする。
-	const sourceLabel = result.context ? 'Context: ' + result.context : '翻訳文字列';
+	const sourceLabel = options.sourceLabel ?? ( result.context ? 'Context: ' + result.context : '翻訳文字列' );
 	head.appendChild( wpgpt_all_page_warnings_create_element( 'strong', '', sourceLabel ) );
+	// 比較画面では原文が同じ提案も翻訳者と翻訳 ID で識別できるようにする。
+	if ( options.detailLabel ) {
+		head.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', options.detailLabel ) );
+	}
 	const actions = wpgpt_all_page_warnings_create_element(
 		'span',
 		'wpgpt-all-page-warnings__card-actions'
@@ -1373,7 +1378,7 @@ function wpgpt_all_page_warnings_result_card( result ) {
 	card.appendChild( head );
 
 	// Warning の有無にかかわらず、Waiting の各原文から複数提案を比較できるようにする。
-	if ( 'waiting' === wpgptAllPageWarningsState.status ) {
+	if ( 'waiting' === wpgptAllPageWarningsState.status && ! options.hideCompare ) {
 		const compare = wpgpt_all_page_warnings_create_element( 'button', 'button', '複数の翻訳提案を確認' );
 		compare.type = 'button';
 		compare.addEventListener( 'click', () => wpgpt_all_page_warnings_open_waiting( result, compare ) );
@@ -1419,6 +1424,16 @@ function wpgpt_all_page_warnings_result_card( result ) {
 		warnings.appendChild( list );
 	} else {
 		warnings.appendChild( wpgpt_all_page_warnings_create_element( 'span', '', 'Warning なし' ) );
+	}
+	// 比較画面では既存の Warning に加えて、元の判定で発生した Notice も示す。
+	if ( options.notices?.length ) {
+		const noticeList = document.createElement( 'ul' );
+		options.notices.forEach( ( notice ) => {
+			const label = result.translations.length > 1 ? 'Form #' + notice.form + ': ' : '';
+			noticeList.appendChild( wpgpt_all_page_warnings_create_element( 'li', 'waiting-notice', label + notice.text ) );
+		} );
+		warnings.appendChild( wpgpt_all_page_warnings_create_element( 'strong', '', 'Notices' ) );
+		warnings.appendChild( noticeList );
 	}
 	body.append( original, translated, warnings );
 	card.appendChild( body );
