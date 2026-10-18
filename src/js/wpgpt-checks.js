@@ -694,7 +694,8 @@ function wpgpt_ja_check_half_width( translated ) {
  *
  * 半角英字・記号と日本語の境界には原則として半角スペース1つを要求する。
  * 日本語の句読点・括弧類、プレースホルダーなどの技術文字列にはこの境界ルールを適用しない。
- * コロンは一般境界とは別の規則として、前にスペースを置かず、後ろに1つ置く。
+ * コロンは一般境界とは別に判定し、数字区切りとかぎ括弧直前では空白を置かず、
+ * それ以外では前に空白を置かず後ろに半角スペース1つを置く。
  *
  * @param {string} translated 判定対象の翻訳文。
  * @returns {Array<Object>} ルール 1-4 に該当する指摘。
@@ -703,7 +704,7 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 	const { protected_indexes, hidden_markup_indexes } = wpgpt_ja_protect_technical_text( translated );
 	const spacing_text = translated.replace( /%\d*\$?d/gu, ( value ) => '0'.repeat( value.length ) );
 	const spacing_characters = new Set( [ ' ', '\u00a0', '　' ] );
-	const valid_colon_spacing_characters = new Set( [ ' ', '　' ] );
+	const valid_colon_spacing_characters = new Set( [ ' ' ] );
 	const findings = [];
 	const boundary_matches = [];
 	let boundary_message;
@@ -711,6 +712,7 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 	let unnecessary_symbol;
 	const colon_before_matches = [];
 	const colon_after_matches = [];
+	const numeric_colon_after_matches = [];
 
 	// 半角文字と日本語の境界を確認し、必要な半角スペースが1つだけ存在することを保証する。
 	for ( let index = 0; index < spacing_text.length - 1; index++ ) {
@@ -819,7 +821,7 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		}
 	}
 
-	// コロン固有の規則として、表示上の前後関係を基準に「前は空白なし、後は1つ」を確認する。
+	// 翻訳文中の各コロンを確認し、数字の区切りやかぎ括弧の例外を優先して前後の空白を判定する。
 	for ( let index = 0; index < translated.length; index++ ) {
 
 		/*
@@ -831,14 +833,16 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		const after = wpgpt_ja_visible_adjacent_text( translated, hidden_markup_indexes, index + 1, 1, spacing_characters );
 
 		/*
-		 * 「12:30」のように、空白を挟まず数字同士をコロンで区切る場合は
-		 * 時刻表記として扱い、コロン後の空白を要求しない。
+		 * 数字同士をコロンで区切る表記では、前後とも空白を入れない。
+		 * 不要な空白がある場合も同じ区切りとして扱い、修正を案内する。
 		 */
-		if (
-			before && after &&
-			0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length &&
-			/\d/u.test( before.character ) && /\d/u.test( after.character )
-		) continue;
+		const numeric_separator = before && after &&
+			/\d/u.test( before.character ) && /\d/u.test( after.character );
+		/*
+		 * 数字の区切りに既に空白がない場合は適正な表記として扱い、
+		 * 通常のコロン後スペース規則を適用しない。
+		 */
+		if ( numeric_separator && 0 === before.spacing_indexes.length && 0 === after.spacing_indexes.length ) continue;
 
 		/*
 		 * コロンの直前には空白を置かないため、
@@ -853,14 +857,26 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 		 */
 		if ( after ) {
 			/*
-			 * コロンの直後は、許可された空白文字が1つだけ存在する状態を正しいものとする。
-			 * 空白がない、複数ある、または許可されていない空白文字を含む場合は指摘する。
+			 * かぎ括弧の前には空白を入れないため、コロン後にも空白を要求しない。
+			 * 不要な空白は既存のかぎ括弧専用規則に委ね、重複指摘を避ける。
 			 */
-			// コロン後の空白列に、許可していない空白文字が1つでも含まれるかを確認する。
+			if ( '「' === after.character || '『' === after.character ) continue;
+
+			/*
+			 * 数字の区切りには空白を入れず、それ以外のコロンの後には
+			 * 半角スペース1つを要求する。全角スペースや複数空白は認めない。
+			 */
+			// コロン後に空白がある場合、半角スペース以外の文字が含まれていないか確認する。
 			const invalid = after.spacing_indexes.some( ( spacing_index ) => ! valid_colon_spacing_characters.has( translated[ spacing_index ] || '' ) );
-			// 空白なし・複数空白・不正な空白文字のいずれかなら、正しいコロン後スペースではない。
-			if ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) {
-				colon_after_matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
+			/*
+			 * 数字の区切りは空白があれば不要として指摘する。
+			 * 通常のコロンは半角スペースが1つ以外の場合に指摘し、
+			 * 別の規則と相反する修正を要求しない。
+			 */
+			if ( ( numeric_separator && after.spacing_indexes.length > 0 ) ||
+				( ! numeric_separator && ( 0 === after.spacing_indexes.length || after.spacing_indexes.length > 1 || invalid ) ) ) {
+				const matches = numeric_separator ? numeric_colon_after_matches : colon_after_matches;
+				matches.push( wpgpt_ja_match( index, after.character_index + 1 ) );
 			}
 		}
 	}
@@ -871,16 +887,18 @@ function wpgpt_ja_check_half_full_spacing( translated ) {
 	unnecessary_symbol && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, `「${unnecessary_symbol}」の前後のスペースは不要です`, symbol_matches ) );
 	// コロン前の不要な空白が1件以上あった場合だけ、コロン前の指摘を結果へ追加する。
 	colon_before_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の前のスペースは不要です', colon_before_matches ) );
-	// コロン後の空白不足・不正が1件以上あった場合だけ、コロン後の指摘を結果へ追加する。
+	// 通常のコロン後では半角スペース1つを要求し、数字区切りの不要な空白とは案内を分ける。
 	colon_after_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の後にスペースを1つ入れてください', colon_after_matches ) );
+	// 数字区切りの後方に空白がある場合は、追加ではなく削除するよう案内する。
+	numeric_colon_after_matches.length && findings.push( wpgpt_ja_finding( 'ja_half_full_spacing', WPGPT_JA_STYLE_GUIDE.half_full_spacing, '「:」の後のスペースは不要です', numeric_colon_after_matches ) );
 	return findings;
 }
 
 /**
  * ルール 1-5「半角丸括弧と前後スペース」を確認する。
  *
- * 丸括弧は半角を使用し、日本語句読点や文字列境界などの例外を除いて、
- * 丸括弧の外側には半角スペース1つを置く。
+ * 丸括弧は半角を使用し、日本語句読点・かぎ括弧・閉じ括弧直後のコロンや
+ * 文字列境界などの例外を除いて、丸括弧の外側には半角スペース1つを置く。
  * マークアップを挟む場合も、画面上で見える文字との境界を基準に判定する。
  *
  * @param {string} translated 判定対象の翻訳文。
@@ -891,7 +909,7 @@ function wpgpt_ja_check_parentheses( translated ) {
 	const findings = [];
 	const full_width_matches = [];
 	const outer_matches = [];
-	// 丸括弧の表記と、利用者に見える外側文字とのスペース関係を翻訳文全体で確認する。
+	// 本文中の各丸括弧について、半角表記と外側の空白を確認し、句読点・コロンの優先規則を適用する。
 	for ( let index = 0; index < translated.length; index++ ) {
 
 		/*
@@ -931,11 +949,10 @@ function wpgpt_ja_check_parentheses( translated ) {
 			const outside = wpgpt_ja_outer_parentheses_spacing( translated, hidden_markup_indexes, index + 1, 1 );
 
 			/*
-			 * 閉じ括弧の直後が句点などの例外でない場合は、
-			 * 外側に半角スペース1つを要求する。
-			 * 「。」は閉じ括弧の直後に直接置けるため、明示的に対象外とする。
+			 * 閉じ括弧の直後は原則として半角スペース1つを要求する。
+			 * 句読点・かぎ括弧とコロンは、各記号の前に空白を置かない規則を優先する。
 			 */
-			if ( outside && '。' !== outside.character && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
+			if ( outside && ':' !== outside.character && ! WPGPT_JA_OUTER_PARENTHESES_SPACE_EXCEPTIONS.has( outside.character ) && 1 !== outside.space_count ) {
 				outer_matches.push( wpgpt_ja_match( index, Math.min( translated.length, index + Math.max( 2, outside.space_count + 1 ) ) ) );
 			}
 		}

@@ -1315,3 +1315,117 @@ describe( 'Japanese v1 match ranges', () => {
 		assert.deepEqual( findings[ 0 ].matches, [] );
 	} );
 } );
+
+/**
+ * 翻訳スタイルガイドの暫定解釈（#46・#47）について、
+ * 複数ルールを同時に有効にした場合も矛盾する警告が出ないことを確認する。
+ * 既存の単独ルールの試験は繰り返さず、競合しやすい境界を対象とする。
+ */
+describe( 'Japanese spacing rule precedence (provisional #46 and #47)', () => {
+	const runAll = ( translated ) => checks.runJapaneseChecks(
+		'Label',
+		translated,
+		Object.fromEntries( JAPANESE_RULE_SETTINGS.map( ( key ) => [ key, 'warning' ] ) )
+	);
+
+	/**
+	 * コロンと丸括弧の専用規則に従った表記では、
+	 * 全ルール適用時にも修正を要求しないことを確認する。
+	 */
+	test( 'accepted punctuation boundaries are clean with all rules enabled', () => {
+		for ( const value of [
+			'項目:「設定」',
+			'項目:『設定』',
+			'設定 (詳細): 値',
+			'「項目」(補足)',
+			'WordPress 6.8 (推奨)',
+			'件数: 10',
+			'12:30',
+			'2:3',
+		] ) {
+			assertClean( runAll( value ) );
+		}
+	} );
+
+	/**
+	 * コロン・丸括弧の外側に不要な空白を置いた場合は警告され、
+	 * 正しい表記へ修正すれば警告が解消することを確認する。
+	 */
+	test( 'invalid punctuation boundaries report warnings that disappear after correction', () => {
+		for ( const [ incorrect, corrected ] of [
+			[ '項目: 「設定」', '項目:「設定」' ],
+			[ '設定 (詳細) : 値', '設定 (詳細): 値' ],
+			[ 'WordPress 6.8(推奨)', 'WordPress 6.8 (推奨)' ],
+			[ '件数:10', '件数: 10' ],
+			[ '12: 30', '12:30' ],
+			[ '2: 3', '2:3' ],
+			[ '設定 ( 詳細 )', '設定 (詳細)' ],
+		] ) {
+			assert.ok( runAll( incorrect ).warning.length > 0, incorrect );
+			assertClean( runAll( corrected ) );
+		}
+	} );
+
+	/**
+	 * 通常のコロン後では半角スペースだけを認め、
+	 * かぎ括弧直前では空白を認めないことを確認する。
+	 */
+	test( 'colon exceptions and full-width spacing are handled by rule 1-4', () => {
+		const missing = '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください';
+		assertClean( runRule( 'ja_half_full_spacing', 'Label', '項目:「設定」' ) );
+		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '項目:　設定' ), missing );
+		assertWarning( runRule( 'ja_half_full_spacing', 'Label', '12: 30' ), '1-4 半角文字と全角文字の間のスペース: 「:」の後のスペースは不要です' );
+		assertClean( runRule( 'ja_half_full_spacing', 'Label', '件数: 10' ) );
+	} );
+
+	/**
+	 * 一つの翻訳に数字の区切りと通常のコロンが混在しても、
+	 * 各コロンに適切な例外を適用し、別のコロンの指摘を失わないことを確認する。
+	 */
+	test( 'numeric and ordinary colons are assessed independently in the same translation', () => {
+		assertClean( runAll( '時刻12:30、件数: 10' ) );
+		const result = runRule( 'ja_half_full_spacing', 'Label', '時刻12:30、件数:10' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+	} );
+
+	/**
+	 * 数字区切りの前後に不要な空白がある場合でも、
+	 * コロン前後をそれぞれ修正できることを確認する。
+	 */
+	test( 'numeric separator spacing is checked on both sides of a colon', () => {
+		const result = runRule( 'ja_half_full_spacing', 'Label', '12 : 30' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の前のスペースは不要です' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後のスペースは不要です' );
+		assertClean( runAll( '12:30' ) );
+	} );
+
+	/**
+	 * 数字区切りと通常のコロンの違反が混在する場合も、
+	 * 利用者へ相反する空白修正を案内しないことを確認する。
+	 */
+	test( 'numeric and ordinary colon messages remain distinct', () => {
+		const result = runRule( 'ja_half_full_spacing', 'Label', '時刻12: 30、件数:10' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後のスペースは不要です' );
+		assertWarning( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+		assertClean( runAll( '時刻12:30、件数: 10' ) );
+	} );
+
+	/**
+	 * 表示されないマークアップを挟んでも、コロンと丸括弧の
+	 * 例外を画面上の文字の並びとして一貫して判断することを確認する。
+	 */
+	test( 'spacing precedence respects visible boundaries across markup', () => {
+		assertClean( runAll( '<strong>項目:</strong>「設定」' ) );
+		assertClean( runAll( '<strong>設定 (詳細)</strong>: 値' ) );
+	} );
+
+	/**
+	 * 警告と通知の設定変更によって、専用ルールの指摘内容が
+	 * 消失したり誤った重要度に振り分けられたりしないことを確認する。
+	 */
+	test( 'colon spacing findings respect notice severity', () => {
+		const result = runRule( 'ja_half_full_spacing', 'Label', '項目:　設定', 'notice' );
+		assert.deepEqual( result.warning, [] );
+		assertNotice( result, '1-4 半角文字と全角文字の間のスペース: 「:」の後にスペースを1つ入れてください' );
+	} );
+} );
