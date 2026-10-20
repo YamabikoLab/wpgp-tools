@@ -2204,10 +2204,11 @@ function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
  *
  * @param {Object} result 全件確認結果の対象原文。
  * @param {HTMLButtonElement} button 明示操作を行ったボタン。
+ * @param {string|null} knownOriginalId 検索済みで確定した原文 ID。未指定時は元画面で確定する。
  * @returns {Promise<void>} タブ起動要求の完了。
  */
-async function wpgpt_all_page_warnings_open_waiting( result, button ) {
-	if ( button.disabled || wpgptAllPageWarningsState.status !== 'waiting' ) return;
+async function wpgpt_all_page_warnings_open_waiting( result, button, knownOriginalId = null ) {
+	if ( button.disabled || ( wpgptAllPageWarningsState.status !== 'waiting' && ! knownOriginalId ) ) return;
 	button.disabled = true;
 	const originalLabel = button.textContent;
 	button.textContent = '提案を取得しています…';
@@ -2215,7 +2216,7 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 		// 個別比較は全翻訳者を対象とし、走査時の翻訳者条件を引き継がない。
 		const original = result.singularOriginal || result.original;
 		const source = result.sourceUrl;
-		let id = wpgpt_all_page_warnings_visible_original_id( result );
+		let id = knownOriginalId || wpgpt_all_page_warnings_visible_original_id( result );
 		// 表示中の行で特定できない場合に限り、GlotPress の原文検索を1回だけ実行する。
 		if ( ! id ) {
 			id = await wpgpt_all_page_warnings_find_waiting_original_id( source, result );
@@ -2275,6 +2276,8 @@ function wpgpt_init_all_page_warnings() {
 
 	const ui = wpgpt_all_page_warnings_build_ui();
 	paging.insertAdjacentElement( 'afterend', ui );
+	// 複数 Waiting 検索を、既存の全件 Warning 操作と独立して設置できるよう通知する。
+	document.dispatchEvent( new CustomEvent( 'wpgpt-all-page-warnings-ready', { detail: { root: ui } } ) );
 }
 
 // ブラウザー画面で読み込まれた場合だけ自動初期化し、単体テスト環境では明示呼び出しに任せる。
