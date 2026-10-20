@@ -2208,6 +2208,8 @@ function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
  * @returns {Promise<void>} タブ起動要求の完了。
  */
 async function wpgpt_all_page_warnings_open_waiting( result, button, knownOriginalId = null ) {
+	// 検索一覧から原文 ID が確定している場合は、既存の PO スキャン状態に依存せず比較できる。
+	// 未確定の場合は従来どおり Waiting の結果からのみ起動し、二重操作も禁止する。
 	if ( button.disabled || ( wpgptAllPageWarningsState.status !== 'waiting' && ! knownOriginalId ) ) return;
 	button.disabled = true;
 	const originalLabel = button.textContent;
@@ -2216,6 +2218,7 @@ async function wpgpt_all_page_warnings_open_waiting( result, button, knownOrigin
 		// 個別比較は全翻訳者を対象とし、走査時の翻訳者条件を引き継がない。
 		const original = result.singularOriginal || result.original;
 		const source = result.sourceUrl;
+		// 複数 Waiting の検索で取得済みの原文 ID は再探索せず、比較対象の提案だけを新たに取得する。
 		let id = knownOriginalId || wpgpt_all_page_warnings_visible_original_id( result );
 		// 表示中の行で特定できない場合に限り、GlotPress の原文検索を1回だけ実行する。
 		if ( ! id ) {
