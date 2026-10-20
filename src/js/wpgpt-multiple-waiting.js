@@ -156,6 +156,7 @@
 			' 原文｜重複 ID: ' + stats.duplicates + ' 件';
 		ui.qualification.textContent = '注意: ソート日時が同じ提案や検索中の追加・更新・削除でページ境界が変化し、' +
 			'空ページを確認しても全件網羅・同時点の状態は保証されません。' +
+			// 重複が観測された検索では、表示上も網羅性の不確実さを強調する。
 			( stats.duplicates ? ' ページ境界重複あり／網羅性未保証。' : '' );
 		ui.results.replaceChildren();
 		// DOM の増加を抑えるため、原文単位で25件ずつ表示する。
@@ -222,11 +223,13 @@
 			// API が総ページ数を返さないため、空配列を受け取るか上限に達するまで順に取得する。
 			// API に総ページ数がないため、空ページの確認または上限まで、同一条件の Waiting を逐次調べる。
 			for ( let number = 1; number <= MAX_PAGES; number++ ) {
+				// 取得開始前に中止された場合は、新たな通信を発生させない。
 				if ( signal.aborted ) { outcome = '途中結果：中止'; break; }
 				url.searchParams.set( 'page', String( number ) );
 				const response = await fetch( url.href, {
 					method: 'GET', credentials: 'same-origin', redirect: 'error', signal,
 				} );
+				// 応答待ちの間に中止された結果は採用せず、次ページも取得しない。
 				if ( signal.aborted ) { outcome = '途中結果：中止'; break; }
 				// HTTP の制限・権限・障害は自動再試行せず取得済みの途中結果として扱う。
 				if ( ! response.ok ) throw new Error( 'HTTP ' + response.status + '（自動再試行なし）' );
@@ -235,6 +238,7 @@
 					throw new Error( 'JSON 以外の応答です。' );
 				}
 				const rows = await response.json();
+				// 応答本文の読み取り中に中止されたページは集計せず、途中結果を維持する。
 				if ( signal.aborted ) { outcome = '途中結果：中止'; break; }
 				ingest( rows );
 				stats.pages++;
@@ -249,6 +253,7 @@
 				if ( number < MAX_PAGES ) await pause( signal );
 			}
 		} catch ( error ) {
+			// 中止による停止と通信・形式の異常を区別し、利用者が理由を確認できるようにする。
 			outcome = signal.aborted ? '途中結果：中止' :
 				'途中結果：' + ( error?.message || String( error ) );
 		} finally {
