@@ -20,11 +20,11 @@ const row = ( id, originalId = 10, extra = {} ) => ( {
 
 function load( responses = [], check = ( original, translated ) => ( {
 	warning: translated.includes( '!' ) ? [ { textContent: '警告' } ] : [],
-} ) ) {
+} ), schedule = ( fn ) => { fn(); return 1; } ) {
 	const urls = [];
 	let index = 0;
 	const context = {
-		URL, AbortController, module: { exports: {} }, setTimeout: ( fn ) => { fn(); return 1; },
+		URL, AbortController, module: { exports: {} }, setTimeout: schedule,
 		clearTimeout() {},
 		location: new URL( setUrl ),
 		document: { addEventListener() {}, querySelector: () => null,
@@ -205,6 +205,25 @@ describe( 'multiple Waiting scan lifecycle', () => {
 		assert.equal( api.visible()[ 0 ].originalId, '10' );
 		assert.equal( api.groups.get( '20' ).proposals.size, 2 );
 		assert.equal( urls.length, 2 );
+	} );
+
+	test( 'cancellation during the page interval prevents the next request', async () => {
+		let waiting;
+		const schedule = ( callback, delay ) => {
+			waiting = { callback, delay };
+			return 1;
+		};
+		const controller = new AbortController();
+		const { api, urls } = load( [ response( [ row( 1 ) ] ), response( [ row( 2 ) ] ) ],
+			undefined, schedule );
+		const request = api.scan( controller.signal );
+		await new Promise( ( resolve ) => setImmediate( resolve ) );
+		assert.equal( waiting.delay, 1000 );
+		assert.equal( urls.length, 1 );
+		controller.abort();
+		await request;
+		assert.equal( urls.length, 1 );
+		assert.match( api.stats.outcome, /中止/u );
 	} );
 
 	test( 'does not send a GET after user aborts during first response', async () => {
