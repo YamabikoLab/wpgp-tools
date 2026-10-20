@@ -8,6 +8,12 @@ WPGP Tools for Japanese (YamabikoLab) は、WordPress の日本語翻訳作業�
 - **[Chrome ウェブストアからインストール](https://chromewebstore.google.com/detail/wpgp-tools-for-japanese-y/ilclhahfffhabdbeadpapfdmghgkejml)**
 - **[📖 インストールと初期設定ガイド（日本語）](docs/setup-ja.md)**
 
+### 複数 Waiting 提案の検索
+
+翻訳セットのページにある「複数 Waiting を検索」を押すと、全翻訳者の Waiting 提案を元タブ内で逐次調べ、同じ原文 ID に異なる翻訳 ID が2件以上ある原文を表示します。Warning が0件の原文も対象となり、「Warning ありのみ」で表示を切り替えられます。各原文の「個別比較」では、最新の対象提案を元タブから再取得して、既存の読み取り専用比較タブに表示します。
+
+最大50ページ（空ページの確認を含む）を1秒以上の間隔で順に取得します。429、403、通信・応答の異常では自動再試行せず停止します。中止やページ上限で停止した場合も取得済みの途中結果は確認できます。正常な空ページを受信した場合のみ「走査終了（空ページ確認）」と表示しますが、並び順が同時刻で一意にならず、検索中の更新などでページ境界が変わるため、**全件網羅や同一時点の状態は保証しません**。翻訳の書き換えや設定の永続保存は行いません。
+
 日本語翻訳チェックを利用する場合は、句点 `。` と `Japanese checks` の設定をご確認ください。
 
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
