@@ -139,6 +139,8 @@
 		stop.disabled = false;
 		lines.length = 0;
 		const groups = new Map();
+		let previousPageIds = null;
+		let previousPageOriginalIds = null;
 		let pages = 0;
 		let rows = 0;
 		let outcome = '最大2ページ到達（終端・全件網羅は未確認）';
@@ -162,6 +164,22 @@
 					break;
 				}
 				const inspected = inspect( response.payload, groups );
+				// ページ間の重なりは今回の応答だけを比較し、追加通信なしでページングの有効性を観測する。
+				const pageIds = new Set( response.payload.map( ( row ) => String( row.id ) ) );
+				const pageOriginalIds = new Set( response.payload.map( ( row ) => String( row.original_id ) ) );
+				log( 'ページ ' + page + ' の翻訳 ID: ' + pageIds.size +
+					' 種類 / ページ内重複 ' + ( inspected.count - pageIds.size ) + ' 件' );
+				if ( previousPageIds ) {
+					const repeatedIds = Array.from( pageIds ).filter( ( id ) => previousPageIds.has( id ) ).length;
+					const sharedOriginals = Array.from( pageOriginalIds ).filter(
+						( id ) => previousPageOriginalIds.has( id )
+					).length;
+					log( 'ページ ' + ( page - 1 ) + ' と ' + page + ' の比較: 翻訳 ID 共通 ' +
+						repeatedIds + ' 件 / 翻訳 ID 新規 ' + ( pageIds.size - repeatedIds ) +
+						' 件 / 原文 ID 共通 ' + sharedOriginals + ' 件' );
+				}
+				previousPageIds = pageIds;
+				previousPageOriginalIds = pageOriginalIds;
 				pages++;
 				rows += inspected.count;
 				log( '取得 ' + inspected.count + ' 件、項目の型: ' + JSON.stringify( inspected.details ) );
