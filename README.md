@@ -1,6 +1,15 @@
 
 # WPGP Tools for Japanese - YamabikoLab
 
+## 日本語ユーザー向け
+
+WPGP Tools for Japanese (YamabikoLab) は、WordPress の日本語翻訳作業を支援する Chrome 拡張機能です。
+
+- **[Chrome ウェブストアからインストール](https://chromewebstore.google.com/detail/wpgp-tools-for-japanese-y/ilclhahfffhabdbeadpapfdmghgkejml)**
+- **[📖 インストールと初期設定ガイド（日本語）](docs/setup-ja.md)**
+
+日本語翻訳チェックを利用する場合は、句点 `。` と `Japanese checks` の設定をご確認ください。
+
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 
 This repository is a **YamabikoLab-maintained fork of [WPGP Tools](https://github.com/vlad-timotei/wpgp-tools)**, extended for Japanese WordPress translation work on translate.wordpress.org.
