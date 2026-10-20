@@ -44,6 +44,9 @@ function load( responses = [] ) {
 	const api = context.module.exports;
 	api.setUI( {
 		start: { disabled: true }, stop: { disabled: false },
+		info: { textContent: '' }, qualification: { textContent: '' },
+		results: { replaceChildren() {}, appendChild() {} },
+		page: { textContent: '' }, prev: { disabled: false }, next: { disabled: false },
 	} );
 	return { api, urls };
 }
