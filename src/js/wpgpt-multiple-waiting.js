@@ -105,13 +105,10 @@
 			seen.set( item.id, signature );
 		}
 		// 検証できたページだけ確定状態に取り込む。
-		const addedOnPage = new Set();
 		// 検証が完了したページの新しい翻訳 ID だけを集計し、二重計上を防ぐ。
 		for ( const item of prepared ) {
 			// 確認済みの翻訳 ID は追加せず、翻訳 ID の種類で複数 Waiting を数える。
-			// ページをまたぐ重複だけでなく、同一ページ内の再出現も集計しない。
-			if ( translationIds.has( item.id ) || addedOnPage.has( item.id ) ) continue;
-			addedOnPage.add( item.id );
+			if ( translationIds.has( item.id ) ) continue;
 			translationIds.set( item.id, JSON.stringify( item ) );
 			// 初めて確認した原文は新規登録し、次のページの提案も同じ原文へ追加できるようにする。
 			if ( ! groups.has( item.originalId ) ) {
