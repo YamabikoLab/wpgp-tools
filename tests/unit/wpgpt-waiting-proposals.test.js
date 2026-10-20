@@ -169,6 +169,51 @@ function htmlDocument( rows, pagination = false ) {
 	};
 }
 
+
+describe( 'comparison opened from multiple Waiting discovery', () => {
+	test( 're-fetches the selected original even when the PO scan is set to Current', async () => {
+		const requests = [];
+		const events = [];
+		const sourceCode = fs.readFileSync(
+			path.join( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( {
+			URL,
+			wpgpt_settings: { ja_checks: { state: 'enabled' } },
+			CustomEvent: class {
+				constructor( type, options ) { this.type = type; this.detail = options.detail; }
+			},
+			document: {
+				addEventListener() {},
+				dispatchEvent( event ) { events.push( event ); },
+			},
+			fetch: async ( url, options ) => {
+				requests.push( { url, options } );
+				return {
+					ok: true, status: 200,
+					headers: { get: () => 'application/json' },
+					json: async () => [ proposal( '1' ), proposal( '2', { user: { user_login: 'bob' } } ) ],
+				};
+			},
+		} );
+		vm.runInContext( sourceCode, context );
+		const open = vm.runInContext( 'wpgpt_all_page_warnings_open_waiting', context );
+		const button = { disabled: false, textContent: '個別比較' };
+		await open( { ...result, sourceUrl: source }, button, '22606895' );
+		assert.equal( requests.length, 1 );
+		const requested = new URL( requests[ 0 ].url );
+		assert.equal( requested.searchParams.get( 'filters[original_id]' ), '22606895' );
+		assert.equal( requested.searchParams.get( 'filters[status]' ), 'waiting' );
+		assert.equal( requests[ 0 ].options.method, 'GET' );
+		assert.equal( events.length, 1 );
+		assert.equal( events[ 0 ].type, 'wpgpt-waiting-proposals-open' );
+		const payload = events[ 0 ].detail.payload;
+		assert.equal( payload.id, '22606895' );
+		assert.equal( payload.proposals.length, 2 );
+		assert.equal( payload.proposals[ 1 ].user.user_login, 'bob' );
+	} );
+} );
+
 describe( 'Waiting original ID fallback via GlotPress search', () => {
 	test( 'search URL uses only Waiting and original filters', () => {
 		const api = load();
