@@ -18,7 +18,9 @@ const row = ( id, originalId = 10, extra = {} ) => ( {
 	translations: [ 'こんにちは' ], user: { user_login: 'tester' }, ...extra,
 } );
 
-function load( responses = [] ) {
+function load( responses = [], check = ( original, translated ) => ( {
+	warning: translated.includes( '!' ) ? [ { textContent: '警告' } ] : [],
+} ) ) {
 	const urls = [];
 	let index = 0;
 	const context = {
@@ -29,9 +31,7 @@ function load( responses = [] ) {
 			createElement: () => ( { textContent: '', className: '', type: '', disabled: false,
 				append() {}, appendChild() {}, addEventListener() {}, setAttribute() {} } ),
 		},
-		wpgpt_run_checks: ( original, translated ) => ( {
-			warning: translated.includes( '!' ) ? [ { textContent: '警告' } ] : [],
-		} ),
+		wpgpt_run_checks: check,
 		wpgpt_all_page_warnings_waiting_api_url: () => setUrl,
 		fetch: async ( url, options ) => {
 			urls.push( { url, options } );
@@ -45,13 +45,14 @@ function load( responses = [] ) {
 	};
 	vm.runInNewContext( src, context );
 	const api = context.module.exports;
-	api.setUI( {
-		start: { disabled: true }, stop: { disabled: false },
+	const ui = {
+		start: { disabled: true }, stop: { disabled: false }, warning: { checked: false },
 		info: { textContent: '' }, qualification: { textContent: '' },
 		results: { replaceChildren() {}, appendChild() {} },
 		page: { textContent: '' }, prev: { disabled: false }, next: { disabled: false },
-	} );
-	return { api, urls };
+	};
+	api.setUI( ui );
+	return { api, urls, ui };
 }
 const response = ( rows, status = 200, type = 'application/json' ) => ( {
 	ok: status === 200, status,
@@ -83,6 +84,33 @@ describe( 'multiple Waiting aggregation', () => {
 		api.ingest( [ row( 1 ) ] );
 		assert.equal( api.visible().length, 0 );
 		assert.equal( api.stats.duplicates, 1 );
+	} );
+
+
+
+	// Warning は訳文フォームごとに元のルール設定で判定し、複数形の原文対応を保つ。
+	test( 'checks singular and plural forms separately without losing proposal identity', () => {
+		const calls = [];
+		const { api } = load( [], ( original, translated, disabled, singular ) => {
+			calls.push( [ original, translated, singular ] );
+			return { warning: translated === '警告!' ? [ {} ] : [] };
+		} );
+		api.ingest( [ row( 1, 10, { singular: 'One file', plural: '%d files',
+			translations: [ 'ファイル', '警告!' ] } ), row( 2, 10, { singular: 'One file',
+			plural: '%d files', translations: [ 'ファイル', 'ファイルたち' ] } ) ] );
+		assert.equal( api.visible().length, 1 );
+		assert.equal( api.visible()[ 0 ].proposals.get( '1' ).warnings, 1 );
+		assert.equal( api.visible()[ 0 ].proposals.get( '2' ).warnings, 0 );
+		assert.deepEqual( calls[ 0 ], [ 'One file', 'ファイル', 'One file' ] );
+		assert.deepEqual( calls[ 1 ], [ '%d files', '警告!', 'One file' ] );
+	} );
+
+	test( 'treats repeated IDs within the same page as one proposal', () => {
+		const { api } = load();
+		api.ingest( [ row( 1 ), row( 1 ) ] );
+		assert.equal( api.groups.get( '10' ).proposals.size, 1 );
+		assert.equal( api.stats.duplicates, 1 );
+		assert.equal( api.visible().length, 0 );
 	} );
 
 	test( 'rejects inconsistent IDs or original metadata without partial page ingestion', () => {
@@ -132,6 +160,51 @@ describe( 'multiple Waiting scan lifecycle', () => {
 			assert.equal( api.stats.pages, 0 );
 			assert.equal( urls.length, 1 );
 		}
+	} );
+
+
+
+	test( 'keeps results provisional when the page ceiling is reached without an empty response', async () => {
+		const pages = Array.from( { length: 50 }, ( _, index ) => response( [ row( index + 1 ) ] ) );
+		const { api, urls } = load( pages );
+		await api.scan( new AbortController().signal );
+		assert.equal( urls.length, 50 );
+		assert.equal( api.stats.pages, 50 );
+		assert.match( api.stats.outcome, /途中結果：最大ページ数/u );
+		assert.equal( api.visible().length, 1 );
+	} );
+
+	test( 'resets previous results and prevents simultaneous searches', async () => {
+		let release;
+		const pending = new Promise( ( resolve ) => { release = resolve; } );
+		const { api, urls, ui } = load( [ pending, response( [] ) ] );
+		api.ingest( [ row( 1 ), row( 2 ) ] );
+		api.start();
+		api.start();
+		assert.equal( api.visible().length, 0 );
+		assert.equal( urls.length, 1 );
+		assert.equal( ui.start.disabled, true );
+		release( response( [] ) );
+		await new Promise( ( resolve ) => setImmediate( resolve ) );
+		assert.equal( ui.start.disabled, false );
+		api.start();
+		await new Promise( ( resolve ) => setImmediate( resolve ) );
+		assert.equal( urls.length, 2 );
+		assert.equal( api.stats.outcome, '走査終了（空ページ確認）' );
+	} );
+
+	test( 'Warning-only choice filters results without narrowing API acquisition', async () => {
+		const { api, urls, ui } = load( [ response( [
+			row( 1, 10, { translations: [ '!' ] } ), row( 2, 10 ),
+			row( 3, 20 ), row( 4, 20 ),
+		] ), response( [] ) ] );
+		ui.warning.checked = true;
+		api.start();
+		await new Promise( ( resolve ) => setImmediate( resolve ) );
+		assert.equal( api.visible().length, 1 );
+		assert.equal( api.visible()[ 0 ].originalId, '10' );
+		assert.equal( api.groups.get( '20' ).proposals.size, 2 );
+		assert.equal( urls.length, 2 );
 	} );
 
 	test( 'does not send a GET after user aborts during first response', async () => {
