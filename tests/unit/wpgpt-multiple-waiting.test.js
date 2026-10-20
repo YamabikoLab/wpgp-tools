@@ -25,7 +25,10 @@ function load( responses = [] ) {
 		URL, AbortController, module: { exports: {} }, setTimeout: ( fn ) => { fn(); return 1; },
 		clearTimeout() {},
 		location: new URL( setUrl ),
-		document: { addEventListener() {}, querySelector: () => null },
+		document: { addEventListener() {}, querySelector: () => null,
+			createElement: () => ( { textContent: '', className: '', type: '', disabled: false,
+				append() {}, appendChild() {}, addEventListener() {}, setAttribute() {} } ),
+		},
 		wpgpt_run_checks: ( original, translated ) => ( {
 			warning: translated.includes( '!' ) ? [ { textContent: '警告' } ] : [],
 		} ),
