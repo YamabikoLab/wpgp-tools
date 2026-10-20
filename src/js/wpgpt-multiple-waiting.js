@@ -278,6 +278,15 @@
 		render();
 	}
 
+	// Node の単体テストでは実ネットワークに接続せず、集約と停止契約だけを検証する。
+	if ( typeof module !== 'undefined' && module.exports ) {
+		module.exports = {
+			normalize, ingest, visible, scan, start,
+			groups, translationIds,
+			get stats() { return stats; },
+			setUI( value ) { ui = value; },
+		};
+	}
 	// 既存の表示領域と依存する検査機能の読み込み完了後だけ設置する。
 	document.addEventListener( 'wpgpt-all-page-warnings-ready', ( event ) => mount( event.detail?.root ) );
 	mount( document.querySelector( '.wpgpt-all-page-warnings:not(.wpgpt-multiple-waiting)' ) );
