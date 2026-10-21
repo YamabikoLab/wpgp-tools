@@ -243,3 +243,35 @@ test( 'manual Check still works without a saved preview row', () => {
 	assert.equal( result.children.length, 1, 'stale guidance is available without a preview' );
 	assert.equal( f.editor.wpgptManualCheckValues.length, 2 );
 } );
+
+test( 'saving continues to update the saved preview state and filters', () => {
+	const f = fixture();
+	const ctx = load( f );
+	const classes = [];
+	const inserted = [];
+	let refreshed = 0;
+	f.preview.classList.remove = ( ...names ) => classes.push( [ 'remove', ...names ] );
+	f.preview.classList.add = ( name ) => classes.push( [ 'add', name ] );
+	f.preview.querySelector = ( selector ) => {
+		if ( selector === '.actions .action.edit' ) {
+			return { insertAdjacentElement( position, node ) { inserted.push( [ position, node ] ); } };
+		}
+		return null;
+	};
+	ctx.wpgpt_filters = () => { refreshed++; };
+	const result = element();
+	const status = element();
+	ctx.wpgpt_display_check_results( '#editor-1', '#preview-1', {
+		check_results: result,
+		ignore_status: 'block',
+		preview_class: 'wpgpt-has-warning',
+		preview_status: status,
+		labels: [],
+	}, true );
+	assert.equal( f.ignore.style.display, 'block' );
+	assert.deepEqual( classes[ 1 ], [ 'add', 'wpgpt-has-warning' ] );
+	assert.equal( inserted.length, 1, 'saved preview warning status is updated' );
+	assert.equal( inserted[ 0 ][ 1 ], status );
+	assert.equal( refreshed, 1, 'saved preview filters are refreshed' );
+	assert.equal( result.children.length, 0, 'no manual freshness notice in saved results' );
+} );
