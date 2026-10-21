@@ -156,3 +156,90 @@ test( 'editor check only updates the editor result, not the saved preview', () =
 	assert.equal( resultList.children[ 0 ].className, 'wpgpt-manual-check-stale' );
 	assert.equal( resultList.children[ 0 ].hidden, true );
 });
+
+test( 'Save still blocks warnings unless the user explicitly permits them', () => {
+	const f = fixture();
+	const ctx = load( f );
+	const errors = [];
+	ctx.$gp = { notices: { error( message ) { errors.push( message ); } } };
+	let checks = 0;
+	ctx.wpgpt_check_this_translation = () => {
+		checks++;
+		return false;
+	};
+	ctx.wpgpt_editor_init( '#editor-1', '#preview-1' );
+
+	function clickSave() {
+		let blocked = false;
+		f.save.dispatch( 'click', {
+			preventDefault() { blocked = true; },
+			stopPropagation() {},
+		} );
+		return blocked;
+	}
+
+	assert.equal( clickSave(), true, 'warnings block Save by default' );
+	assert.equal( errors.length, 1 );
+	vm.runInContext( 'wpgpt_next_is_strict = false;', ctx );
+	assert.equal( clickSave(), false, 'explicit warning override allows Save' );
+	assert.equal( errors.length, 1, 'no additional error when warnings are allowed' );
+	assert.equal( checks, 2, 'Save continues to check each attempt' );
+	assert.equal( vm.runInContext( 'wpgpt_next_is_strict', ctx ), true, 'override resets after Save' );
+} );
+
+test( 'dynamically added editor gets a single Check without handling unrelated nodes', () => {
+	const f = fixture();
+	const ctx = load( f );
+	const callbacks = [];
+	ctx.MutationObserver = class {
+		constructor( callback ) { callbacks.push( callback ); }
+		observe() {}
+	};
+	ctx.wpgpt_settings.history_main = { state: 'disabled' };
+	let checks = 0;
+	ctx.wpgpt_check_this_translation = () => { checks++; return true; };
+	ctx.wpgpt_mutations();
+	assert.equal( callbacks.length, 1 );
+
+	const editorRow = {
+		nodeType: 1,
+		id: 'editor-1',
+		classList: { contains: ( name ) => name === 'editor' },
+	};
+	const irrelevant = {
+		nodeType: 1,
+		classList: { contains: () => false },
+	};
+	callbacks[ 0 ]( [ { addedNodes: [ irrelevant, editorRow ] } ] );
+	assert.equal( f.actions.children.length, 1 );
+	assert.equal( f.save.listeners.click.length, 1 );
+	assert.equal( checks, 1, 'newly added editor receives existing checks' );
+
+	callbacks[ 0 ]( [ { addedNodes: [ editorRow ] } ] );
+	assert.equal( f.actions.children.length, 1, 'repeat notifications do not add a second Check' );
+	assert.equal( f.save.listeners.click.length, 1, 'Save listener remains single' );
+} );
+
+test( 'manual Check still works without a saved preview row', () => {
+	const f = fixture();
+	f.document.querySelector = ( ( original ) => ( selector ) =>
+		selector === '#preview-1' ? null : original( selector )
+	)( f.document.querySelector );
+	const ctx = load( f );
+	const result = element();
+	const original = f.editor.querySelector;
+	f.editor.querySelector = ( selector ) => {
+		if ( selector === '.meta .wpgpt-checks-list' ) return null;
+		return original( selector );
+	};
+	let validations = 0;
+	ctx.prepare_checks = ( translation ) => {
+		validations++;
+		translation.check_results = result;
+		translation.ignore_status = 'none';
+	};
+	ctx.wpgpt_manual_check( '#editor-1', '#preview-1' );
+	assert.equal( validations, 1 );
+	assert.equal( result.children.length, 1, 'stale guidance is available without a preview' );
+	assert.equal( f.editor.wpgptManualCheckValues.length, 2 );
+} );
