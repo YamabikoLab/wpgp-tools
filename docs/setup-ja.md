@@ -38,25 +38,6 @@ https://translate.wordpress.org/
 >
 > オリジナル版と YamabikoLab 版を同時に有効にすると、チェック処理や画面表示が重複する可能性があります。
 
-### GitHub から手動インストールする場合
-
-Chrome ウェブストアを使用せず、GitHub から手動インストールすることもできます。
-
-1. [GitHub Releases](https://github.com/YamabikoLab/wpgp-tools/releases) を開きます。
-2. 利用するバージョンの Assets から `wpgp-tools-<version>.zip` をダウンロードします。
-3. ZIP ファイルを展開します。
-4. Chrome のアドレスバーに `chrome://extensions` と入力します。
-5. **デベロッパー モード** をオンにします。
-6. **パッケージ化されていない拡張機能を読み込む** をクリックします。
-7. 展開したフォルダーのうち、`manifest.json` が存在するフォルダーを選択します。
-
-![Chrome 拡張機能の手動インストール画面](https://github.com/user-attachments/assets/da523258-a4fc-4bf8-8750-2f7b67d376d7)
-
-> [!NOTE]
-> GitHub が自動生成する `Source code (zip)` ではなく、Assets にある拡張機能配布用 ZIP を使用してください。
->
-> 通常の利用では、自動更新に対応する Chrome ウェブストア版をおすすめします。
-
 ---
 
 ## 3. 日本語翻訳向けの初期設定
@@ -314,8 +295,6 @@ YamabikoLab 版を利用する場合は、オリジナル版を無効化して�
 ### Q. 更新は自動的に行われますか？
 
 Chrome ウェブストアからインストールした場合、通常は Chrome によって自動更新されます。
-
-GitHub から手動インストールした場合は、自動更新されないため、新しいバージョンを手動で導入する必要があります。
 
 ---
 
