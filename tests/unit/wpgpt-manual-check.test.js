@@ -77,8 +77,8 @@ function load( f ) {
 		$wpgpt_addElement: () => {},
 	} );
 	vm.runInContext( fs.readFileSync( path.resolve( __dirname, '../../src/js/wpgpt-checks.js' ), 'utf8' ), context );
-	context.approve_with_warnings.querySelector = () => f.checkbox;
-	context.approve_with_warnings.cloneNode = () => f.warning;
+	context.testFixture = f;
+	vm.runInContext( 'approve_with_warnings.querySelector = () => testFixture.checkbox; approve_with_warnings.cloneNode = () => testFixture.warning;', context );
 	return context;
 }
 
