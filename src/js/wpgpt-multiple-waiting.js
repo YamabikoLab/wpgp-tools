@@ -302,6 +302,18 @@
 		section.className = 'wpgpt-all-page-warnings wpgpt-multiple-waiting';
 		const title = el( '複数 Waiting の検索', 'h2' );
 		const description = el( '全翻訳者の Waiting を原文 ID ごとに探します。明示操作時だけ最大50ページを逐次取得します。', 'p' );
+		// 50ページの取得上限と GlotPress の表示件数設定の関係を検索前に案内する。
+		// 設定の変更は利用者自身が行い、通常の翻訳一覧にも影響することを明示する。
+		const settingsGuide = el( '', 'p' );
+		const settingsLink = el( 'GlotPress のユーザー設定', 'a' );
+		settingsLink.href = 'https://translate.wordpress.org/settings/';
+		settingsLink.target = '_blank';
+		settingsLink.rel = 'noopener noreferrer';
+		settingsGuide.append(
+			document.createTextNode( '見つからない場合は、' ),
+			settingsLink,
+			document.createTextNode( ' の「Number of items per page」を必要に応じて100件や200件に変更してください。1ページの件数が少ないと最大50ページの取得上限に達することがあります。この設定は通常の翻訳一覧にも影響し、全件の検出を保証するものではありません。' )
+		);
 		const startButton = el( '複数 Waiting を検索', 'button' );
 		const stopButton = el( '中止', 'button' );
 		startButton.type = stopButton.type = 'button';
@@ -321,7 +333,7 @@
 		prev.type = next.type = 'button';
 		prev.className = next.className = 'button';
 		const pageLabel = el( '', 'span' );
-		section.append( title, description, startButton, stopButton, label,
+		section.append( title, description, settingsGuide, startButton, stopButton, label,
 			info, qualification, results, prev, pageLabel, next );
 		root.insertAdjacentElement( 'afterend', section );
 		ui = { start: startButton, stop: stopButton, warning, info, qualification, results, prev, next, page: pageLabel };
