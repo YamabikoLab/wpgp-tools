@@ -169,6 +169,109 @@ function htmlDocument( rows, pagination = false ) {
 	};
 }
 
+
+describe( 'comparison opened from multiple Waiting discovery', () => {
+	test( 're-fetches the selected original even when the PO scan is set to Current', async () => {
+		const requests = [];
+		const events = [];
+		const sourceCode = fs.readFileSync(
+			path.join( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( {
+			URL,
+			wpgpt_settings: { ja_checks: { state: 'enabled' } },
+			CustomEvent: class {
+				constructor( type, options = {} ) { this.type = type; this.detail = options.detail; }
+			},
+			document: {
+				addEventListener() {},
+				dispatchEvent( event ) { events.push( event ); },
+			},
+			fetch: async ( url, options ) => {
+				requests.push( { url, options } );
+				return {
+					ok: true, status: 200,
+					headers: { get: () => 'application/json' },
+					json: async () => [ proposal( '1' ), proposal( '2', { user: { user_login: 'bob' } } ) ],
+				};
+			},
+		} );
+		vm.runInContext( sourceCode, context );
+		const open = vm.runInContext( 'wpgpt_all_page_warnings_open_waiting', context );
+		const button = { disabled: false, textContent: '個別比較' };
+		await open( { ...result, sourceUrl: source }, button, '22606895' );
+		assert.equal( requests.length, 1 );
+		const requested = new URL( requests[ 0 ].url );
+		assert.equal( requested.searchParams.get( 'filters[original_id]' ), '22606895' );
+		assert.equal( requested.searchParams.get( 'filters[status]' ), 'waiting' );
+		assert.equal( requests[ 0 ].options.method, 'GET' );
+		// 比較状態の通知とは別に、専用タブ起動イベントを検証する。
+		const openEvents = events.filter( ( event ) => event.type === 'wpgpt-waiting-proposals-open' );
+		assert.equal( openEvents.length, 1 );
+		const payload = openEvents[ 0 ].detail.payload;
+		assert.equal( payload.id, '22606895' );
+		assert.equal( payload.proposals.length, 2 );
+		assert.equal( payload.proposals[ 1 ].user.user_login, 'bob' );
+	} );
+} );
+
+describe( 'Waiting comparison lifecycle', () => {
+	test( 'prevents parallel comparison while a request and tab result are pending', async () => {
+		let finishRequest;
+		let count = 0;
+		const listeners = new Map();
+		const emitted = [];
+		const code = fs.readFileSync(
+			path.join( __dirname, '../../src/js/wpgpt-all-page-warnings.js' ), 'utf8'
+		);
+		const context = vm.createContext( {
+			URL,
+			wpgpt_settings: {},
+			CustomEvent: class {
+				constructor( type, options = {} ) { this.type = type; this.detail = options.detail; }
+			},
+			document: {
+				addEventListener( type, callback ) {
+					if ( ! listeners.has( type ) ) listeners.set( type, [] );
+					listeners.get( type ).push( callback );
+				},
+				dispatchEvent( event ) {
+					emitted.push( event.type );
+					const callbacks = listeners.get( event.type ) || [];
+					listeners.set( event.type, callbacks.filter( ( callback ) =>
+						event.type !== 'wpgpt-waiting-proposals-open-result' ) );
+					callbacks.forEach( ( callback ) => callback( event ) );
+				},
+			},
+			fetch: async () => {
+				count++;
+				await new Promise( ( resolve ) => { finishRequest = resolve; } );
+				return { ok: true, status: 200,
+					headers: { get: () => 'application/json' },
+					json: async () => [ proposal( '1' ), proposal( '2' ) ] };
+			},
+		} );
+		vm.runInContext( code, context );
+		const open = vm.runInContext( 'wpgpt_all_page_warnings_open_waiting', context );
+		const busy = vm.runInContext( 'wpgpt_all_page_warnings_waiting_busy', context );
+		const first = { disabled: false, textContent: '個別比較' };
+		const another = { disabled: false, textContent: '個別比較' };
+		const running = open( { ...result, sourceUrl: source }, first, '22606895' );
+		assert.equal( busy(), true );
+		await open( { ...result, sourceUrl: source }, another, '22606895' );
+		assert.equal( count, 1 );
+		finishRequest();
+		await running;
+		assert.equal( busy(), true );
+		await open( { ...result, sourceUrl: source }, another, '22606895' );
+		assert.equal( count, 1 );
+		context.document.dispatchEvent( new context.CustomEvent( 'wpgpt-waiting-proposals-open-result', { detail: {} } ) );
+		assert.equal( busy(), false );
+		assert.equal( first.disabled, false );
+		assert.ok( emitted.includes( 'wpgpt-waiting-comparison-state' ) );
+	} );
+} );
+
 describe( 'Waiting original ID fallback via GlotPress search', () => {
 	test( 'search URL uses only Waiting and original filters', () => {
 		const api = load();

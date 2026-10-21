@@ -2199,23 +2199,49 @@ function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
 	} );
 }
 
+// 比較結果イベントに操作 ID がないため、画面内で起動中の比較は常に1件に限定する。
+let wpgptWaitingComparisonBusy = false;
+
+/**
+ * 複数 Waiting 検索を含む画面の比較ボタンが参照する実行状態。
+ * @returns {boolean} 比較の取得または専用タブ起動を待っているか。
+ */
+function wpgpt_all_page_warnings_waiting_busy() {
+	return wpgptWaitingComparisonBusy;
+}
+
+/**
+ * 比較状態の変更を元タブの一覧へ通知する。
+ * @returns {void}
+ */
+function wpgpt_all_page_warnings_notify_waiting_busy() {
+	document.dispatchEvent( new CustomEvent( 'wpgpt-waiting-comparison-state' ) );
+}
+
 /**
  * Waiting 結果の個別原文を読み取り専用で取得して新しいタブへ引き渡す。
  *
  * @param {Object} result 全件確認結果の対象原文。
  * @param {HTMLButtonElement} button 明示操作を行ったボタン。
+ * @param {string|null} knownOriginalId 検索済みで確定した原文 ID。未指定時は元画面で確定する。
  * @returns {Promise<void>} タブ起動要求の完了。
  */
-async function wpgpt_all_page_warnings_open_waiting( result, button ) {
-	if ( button.disabled || wpgptAllPageWarningsState.status !== 'waiting' ) return;
+async function wpgpt_all_page_warnings_open_waiting( result, button, knownOriginalId = null ) {
+	// 検索一覧から原文 ID が確定している場合は、既存の PO スキャン状態に依存せず比較できる。
+	// 未確定の場合は従来どおり Waiting の結果からのみ起動し、二重操作も禁止する。
+	if ( wpgptWaitingComparisonBusy || button.disabled ||
+		( wpgptAllPageWarningsState.status !== 'waiting' && ! knownOriginalId ) ) return;
+	wpgptWaitingComparisonBusy = true;
 	button.disabled = true;
+	wpgpt_all_page_warnings_notify_waiting_busy();
 	const originalLabel = button.textContent;
 	button.textContent = '提案を取得しています…';
 	try {
 		// 個別比較は全翻訳者を対象とし、走査時の翻訳者条件を引き継がない。
 		const original = result.singularOriginal || result.original;
 		const source = result.sourceUrl;
-		let id = wpgpt_all_page_warnings_visible_original_id( result );
+		// 複数 Waiting の検索で取得済みの原文 ID は再探索せず、比較対象の提案だけを新たに取得する。
+		let id = knownOriginalId || wpgpt_all_page_warnings_visible_original_id( result );
 		// 表示中の行で特定できない場合に限り、GlotPress の原文検索を1回だけ実行する。
 		if ( ! id ) {
 			id = await wpgpt_all_page_warnings_find_waiting_original_id( source, result );
@@ -2231,8 +2257,10 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 		const locale = new URL( source ).pathname.split( '/' ).filter( Boolean ).at( -2 );
 		// タブ起動の成否を受け取り、成功時にも同じ原文を再び確認できる状態へ戻す。
 		document.addEventListener( 'wpgpt-waiting-proposals-open-result', ( event ) => {
+			wpgptWaitingComparisonBusy = false;
 			button.disabled = false;
 			button.textContent = originalLabel;
+			wpgpt_all_page_warnings_notify_waiting_busy();
 			if ( event.detail?.error ) {
 				wpgpt_all_page_warnings_set_status( '専用タブを開けませんでした: ' + event.detail.error, 'error' );
 			}
@@ -2250,6 +2278,8 @@ async function wpgpt_all_page_warnings_open_waiting( result, button ) {
 		wpgpt_all_page_warnings_set_status( '個別確認を開始できません: ' + error.message, 'error' );
 		button.textContent = originalLabel;
 		button.disabled = false;
+		wpgptWaitingComparisonBusy = false;
+		wpgpt_all_page_warnings_notify_waiting_busy();
 	}
 }
 
@@ -2275,6 +2305,8 @@ function wpgpt_init_all_page_warnings() {
 
 	const ui = wpgpt_all_page_warnings_build_ui();
 	paging.insertAdjacentElement( 'afterend', ui );
+	// 複数 Waiting 検索を、既存の全件 Warning 操作と独立して設置できるよう通知する。
+	document.dispatchEvent( new CustomEvent( 'wpgpt-all-page-warnings-ready', { detail: { root: ui } } ) );
 }
 
 // ブラウザー画面で読み込まれた場合だけ自動初期化し、単体テスト環境では明示呼び出しに任せる。
