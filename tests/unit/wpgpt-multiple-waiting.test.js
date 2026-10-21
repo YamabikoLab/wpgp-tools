@@ -32,6 +32,7 @@ function load( responses = [], check = ( original, translated ) => ( {
 				append() {}, appendChild() {}, addEventListener() {}, setAttribute() {} } ),
 		},
 		wpgpt_run_checks: check,
+		wpgpt_all_page_warnings_waiting_busy: () => false,
 		wpgpt_all_page_warnings_waiting_api_url: () => setUrl,
 		fetch: async ( url, options ) => {
 			urls.push( { url, options } );
