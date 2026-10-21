@@ -181,7 +181,7 @@ describe( 'comparison opened from multiple Waiting discovery', () => {
 			URL,
 			wpgpt_settings: { ja_checks: { state: 'enabled' } },
 			CustomEvent: class {
-				constructor( type, options ) { this.type = type; this.detail = options.detail; }
+				constructor( type, options = {} ) { this.type = type; this.detail = options.detail; }
 			},
 			document: {
 				addEventListener() {},
@@ -205,9 +205,10 @@ describe( 'comparison opened from multiple Waiting discovery', () => {
 		assert.equal( requested.searchParams.get( 'filters[original_id]' ), '22606895' );
 		assert.equal( requested.searchParams.get( 'filters[status]' ), 'waiting' );
 		assert.equal( requests[ 0 ].options.method, 'GET' );
-		assert.equal( events.length, 1 );
-		assert.equal( events[ 0 ].type, 'wpgpt-waiting-proposals-open' );
-		const payload = events[ 0 ].detail.payload;
+		// 比較状態の通知とは別に、専用タブ起動イベントを検証する。
+		const openEvents = events.filter( ( event ) => event.type === 'wpgpt-waiting-proposals-open' );
+		assert.equal( openEvents.length, 1 );
+		const payload = openEvents[ 0 ].detail.payload;
 		assert.equal( payload.id, '22606895' );
 		assert.equal( payload.proposals.length, 2 );
 		assert.equal( payload.proposals[ 1 ].user.user_login, 'bob' );
