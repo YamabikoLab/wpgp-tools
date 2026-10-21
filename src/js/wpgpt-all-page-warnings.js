@@ -2199,14 +2199,6 @@ function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
 	} );
 }
 
-/**
- * Waiting 結果の個別原文を読み取り専用で取得して新しいタブへ引き渡す。
- *
- * @param {Object} result 全件確認結果の対象原文。
- * @param {HTMLButtonElement} button 明示操作を行ったボタン。
- * @param {string|null} knownOriginalId 検索済みで確定した原文 ID。未指定時は元画面で確定する。
- * @returns {Promise<void>} タブ起動要求の完了。
- */
 // 比較結果イベントに操作 ID がないため、画面内で起動中の比較は常に1件に限定する。
 let wpgptWaitingComparisonBusy = false;
 
@@ -2226,6 +2218,14 @@ function wpgpt_all_page_warnings_notify_waiting_busy() {
 	document.dispatchEvent( new CustomEvent( 'wpgpt-waiting-comparison-state' ) );
 }
 
+/**
+ * Waiting 結果の個別原文を読み取り専用で取得して新しいタブへ引き渡す。
+ *
+ * @param {Object} result 全件確認結果の対象原文。
+ * @param {HTMLButtonElement} button 明示操作を行ったボタン。
+ * @param {string|null} knownOriginalId 検索済みで確定した原文 ID。未指定時は元画面で確定する。
+ * @returns {Promise<void>} タブ起動要求の完了。
+ */
 async function wpgpt_all_page_warnings_open_waiting( result, button, knownOriginalId = null ) {
 	// 検索一覧から原文 ID が確定している場合は、既存の PO スキャン状態に依存せず比較できる。
 	// 未確定の場合は従来どおり Waiting の結果からのみ起動し、二重操作も禁止する。
