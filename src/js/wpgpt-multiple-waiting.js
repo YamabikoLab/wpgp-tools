@@ -175,7 +175,12 @@
 			const compare = el( '個別比較', 'button' );
 			compare.type = 'button';
 			compare.className = 'button';
+			// 比較結果待機中は一覧が再描画されても全カードの比較を禁止する。
+			compare.disabled = wpgpt_all_page_warnings_waiting_busy();
+			compare.textContent = compare.disabled ? '比較処理中…' : '個別比較';
 			compare.addEventListener( 'click', () => {
+				// 古いボタンや同時クリックでも、共通の比較結果を取り違えない。
+				if ( wpgpt_all_page_warnings_waiting_busy() ) return;
 				// 検索途中の提案は網羅性が未確認のため、個別比較では対象原文を既存 API で再検証する。
 				wpgpt_all_page_warnings_open_waiting( {
 					original: group.original, singularOriginal: group.original,
@@ -343,6 +348,8 @@
 		};
 	}
 	// 既存の表示領域と依存する検査機能の読み込み完了後だけ設置する。
+	// 個別比較が完了した時も、その時点の一覧に操作可否を反映する。
+	document.addEventListener( 'wpgpt-waiting-comparison-state', render );
 	document.addEventListener( 'wpgpt-all-page-warnings-ready', ( event ) => mount( event.detail?.root ) );
 	mount( document.querySelector( '.wpgpt-all-page-warnings:not(.wpgpt-multiple-waiting)' ) );
 } )();
