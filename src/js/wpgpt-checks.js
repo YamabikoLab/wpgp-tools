@@ -84,12 +84,14 @@ function wpgpt_add_labels_highlights( form_label, form_i, translation_p_text, hi
  */
 function wpgpt_editor_init( translation_e_id, translation_p_id ) {
 	const editor = document.querySelector( translation_e_id );
+	// 同じ編集画面を再表示しても操作や監視を二重に追加せず、差し替えられた画面は新規に初期化する。
 	if ( ! editor || editor.dataset.wpgptChecksInitialized ) {
 		return;
 	}
 	editor.dataset.wpgptChecksInitialized = 'true';
 
 	const save = editor.querySelector( '.translation-actions__save' );
+	// 編集権限があり保存操作を表示できる画面に限り、保存しない検査操作を提供する。
 	if ( save ) {
 		const check = document.createElement( 'button' );
 		check.type = 'button';
@@ -103,6 +105,7 @@ function wpgpt_editor_init( translation_e_id, translation_p_id ) {
 
 	// 手動検査後はすべての訳文を比較し、結果が古くなったことだけを通知する。
 	editor.addEventListener( 'input', ( event ) => {
+		// 訳文以外のフォーム操作では、直前の検査結果の鮮度を変更しない。
 		if ( ! event.target.matches( '.translation-wrapper div.textareas textarea' ) ) {
 			return;
 		}
@@ -113,13 +116,16 @@ function wpgpt_editor_init( translation_e_id, translation_p_id ) {
 	new_approve_with_warnings.querySelector( 'input' ).addEventListener( 'click', ( ev ) => { wpgpt_next_is_strict = ! ( ev.target.checked ); } );
 	$wpgpt_addElement( `${translation_e_id} .translation-wrapper`, 'afterend', new_approve_with_warnings );
 
+	// 保存・承認の各操作は従来どおり警告を確認し、手動検査ボタンには保存処理を関連付けない。
 	document.querySelectorAll( `${translation_e_id} .translation-actions__save, ${translation_e_id} .approve` ).forEach( ( btn ) => {
 		btn.addEventListener( 'click', ( e ) => {
+			// 警告を許容していない保存・承認のみを止め、許容した操作は既存の保存処理に委ねる。
 			if ( ( ! wpgpt_check_this_translation( translation_e_id, translation_p_id ) ) && wpgpt_next_is_strict ) {
 				e.preventDefault();
 				e.stopPropagation();
 				$gp.notices.error( wpgpt_error_message );
 			}
+			// すべての編集画面で警告許容を解除し、次の保存時には改めて意思確認する。
 			document.querySelectorAll( '.wpgpt-ignore-warnings input' ).forEach( ( el ) => { el.checked = false; } );
 			wpgpt_next_is_strict = true;
 			wpgpt_user_edited = false;
@@ -136,6 +142,7 @@ function wpgpt_editor_init( translation_e_id, translation_p_id ) {
  */
 function wpgpt_manual_check( translation_e_id, translation_p_id ) {
 	const editor = document.querySelector( translation_e_id );
+	// 編集画面が既に閉じられている場合は検査も結果更新も実行しない。
 	if ( ! editor ) {
 		return;
 	}
@@ -162,6 +169,7 @@ function wpgpt_manual_check( translation_e_id, translation_p_id ) {
  * @returns {string[]} 単数・複数形を含むすべての入力値。
  */
 function wpgpt_editor_values( editor ) {
+	// 複数形の一部のみを変更した場合も検知するため、全訳文を入力順に対象とする。
 	return Array.from( editor.querySelectorAll( '.translation-wrapper div.textareas textarea' ), ( textarea ) => textarea.value );
 }
 
@@ -174,10 +182,12 @@ function wpgpt_editor_values( editor ) {
 function wpgpt_update_manual_check_freshness( editor ) {
 	const status = editor.querySelector( '.wpgpt-manual-check-stale' );
 	const previous = editor.wpgptManualCheckValues;
+	// 手動検査前、または結果が置き換わった場合は、未検査の訳文に古い状態を表示しない。
 	if ( ! status || ! previous ) {
 		return;
 	}
 	const current = wpgpt_editor_values( editor );
+	// すべての訳文が検査時と同一のときだけ結果を最新として扱う。指摘件数には依存しない。
 	status.hidden = previous.length === current.length && previous.every( ( value, index ) => value === current[ index ] );
 }
 
@@ -208,6 +218,7 @@ function wpgpt_check_this_translation( translation_e_id, translation_p_id ) {
 function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTranslation, update_preview = true ) {
 	const editor = document.querySelector( `${translation_e_id} ` );
 	const preview = document.querySelector( `${translation_p_id}` );
+	// 保存時は編集画面と保存済みプレビューの両方が必要。手動検査ではプレビューの有無を問わない。
 	if ( ! editor || ( update_preview && ! preview ) ) {
 		return;
 	}
@@ -217,6 +228,7 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 	( !	editor_check_results ) && editor.querySelector( '.meta dl' ).insertAdjacentElement( 'beforebegin', thisTranslation.check_results );
 
 	// 結果が0件でも、手動検査後の変更を検出できる状態表示を設ける。
+	// 保存されていない結果には、指摘が0件の場合も編集後の再検査を促す案内を付ける。
 	if ( ! update_preview ) {
 		const stale = document.createElement( 'p' );
 		stale.className = 'wpgpt-manual-check-stale';
@@ -225,10 +237,12 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 		thisTranslation.check_results.appendChild( stale );
 	}
 	const editor_ignore_warnings = editor.querySelector( '.wpgpt-ignore-warnings' );
+	// 警告許容操作が存在する編集画面では、検査結果に応じた従来の表示を維持する。
 	if ( editor_ignore_warnings ) {
 		editor_ignore_warnings.style.display = thisTranslation.ignore_status;
 	}
 
+	// 未保存の訳文を保存済みの状態・アイコン・フィルターへ反映しない。
 	if ( ! update_preview ) {
 		return;
 	}
@@ -240,11 +254,14 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 	check_status && check_status.parentNode.replaceChild( thisTranslation.preview_status, check_status );
 	( ! check_status ) && preview.querySelector( '.actions .action.edit' ).insertAdjacentElement( 'afterbegin', thisTranslation.preview_status );
 
+	// 保存時のみ、利用者が有効にしたプレビュー上の指摘ラベルを現行の結果に更新する。
 	if ( 'enabled' === wpgpt_settings.checks_labels.state ) {
+		// 旧訳文の指摘が残らないよう、プレビューにある既存ラベルをすべて除去する。
 		preview.querySelectorAll( '.wpgpt-warning-labels, .wpgpt-notices-labels' ).forEach( ( label ) => {
 			label.parentElement.removeChild( label );
 		} );
 		const new_translation_p_text = preview.querySelectorAll( '.translation-text' );
+		// 単数・複数形それぞれの指摘を、対応する保存済み訳文に表示する。
 		new_translation_p_text.length && thisTranslation.labels.forEach( ( form_label, form_i ) => {
 			wpgpt_add_labels_highlights( form_label, form_i, new_translation_p_text, thisTranslation.highlights );
 		} );
@@ -255,7 +272,9 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 function wpgpt_mutations() {
 	const observer = new MutationObserver( ( mutations ) => {
 		mutations.forEach( ( mutation ) => {
+			// ページ更新で新しく現れた編集画面にも、既存行と同じ保存前検査を提供する。
 			mutation.addedNodes.forEach( ( el ) => {
+				// 訳文編集画面以外の画面部品は対象外とし、保存処理を触らない。
 				if ( 1 !== el.nodeType || ! el.classList.contains( 'editor' ) ) {
 					return;
 				}
