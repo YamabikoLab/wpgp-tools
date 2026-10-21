@@ -171,7 +171,7 @@ test( 'Save still blocks warnings unless the user explicitly permits them', () =
 
 	function clickSave() {
 		let blocked = false;
-		f.save.dispatch( 'click', {
+		f.save.listeners.click[ 0 ]( {
 			preventDefault() { blocked = true; },
 			stopPropagation() {},
 		} );
