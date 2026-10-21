@@ -2207,11 +2207,33 @@ function wpgpt_all_page_warnings_validate_proposals( rows, expected ) {
  * @param {string|null} knownOriginalId 検索済みで確定した原文 ID。未指定時は元画面で確定する。
  * @returns {Promise<void>} タブ起動要求の完了。
  */
-async function wpgpt_all_page_warnings_open_waiting( result, button, knownOriginalId = null ) {
+async // 比較結果イベントに操作 ID がないため、画面内で起動中の比較は常に1件に限定する。
+let wpgptWaitingComparisonBusy = false;
+
+/**
+ * 複数 Waiting 検索を含む画面の比較ボタンが参照する実行状態。
+ * @returns {boolean} 比較の取得または専用タブ起動を待っているか。
+ */
+function wpgpt_all_page_warnings_waiting_busy() {
+	return wpgptWaitingComparisonBusy;
+}
+
+/**
+ * 比較状態の変更を元タブの一覧へ通知する。
+ * @returns {void}
+ */
+function wpgpt_all_page_warnings_notify_waiting_busy() {
+	document.dispatchEvent( new CustomEvent( 'wpgpt-waiting-comparison-state' ) );
+}
+
+function wpgpt_all_page_warnings_open_waiting( result, button, knownOriginalId = null ) {
 	// 検索一覧から原文 ID が確定している場合は、既存の PO スキャン状態に依存せず比較できる。
 	// 未確定の場合は従来どおり Waiting の結果からのみ起動し、二重操作も禁止する。
-	if ( button.disabled || ( wpgptAllPageWarningsState.status !== 'waiting' && ! knownOriginalId ) ) return;
+	if ( wpgptWaitingComparisonBusy || button.disabled ||
+		( wpgptAllPageWarningsState.status !== 'waiting' && ! knownOriginalId ) ) return;
+	wpgptWaitingComparisonBusy = true;
 	button.disabled = true;
+	wpgpt_all_page_warnings_notify_waiting_busy();
 	const originalLabel = button.textContent;
 	button.textContent = '提案を取得しています…';
 	try {
@@ -2235,8 +2257,10 @@ async function wpgpt_all_page_warnings_open_waiting( result, button, knownOrigin
 		const locale = new URL( source ).pathname.split( '/' ).filter( Boolean ).at( -2 );
 		// タブ起動の成否を受け取り、成功時にも同じ原文を再び確認できる状態へ戻す。
 		document.addEventListener( 'wpgpt-waiting-proposals-open-result', ( event ) => {
+			wpgptWaitingComparisonBusy = false;
 			button.disabled = false;
 			button.textContent = originalLabel;
+			wpgpt_all_page_warnings_notify_waiting_busy();
 			if ( event.detail?.error ) {
 				wpgpt_all_page_warnings_set_status( '専用タブを開けませんでした: ' + event.detail.error, 'error' );
 			}
@@ -2254,6 +2278,8 @@ async function wpgpt_all_page_warnings_open_waiting( result, button, knownOrigin
 		wpgpt_all_page_warnings_set_status( '個別確認を開始できません: ' + error.message, 'error' );
 		button.textContent = originalLabel;
 		button.disabled = false;
+		wpgptWaitingComparisonBusy = false;
+		wpgpt_all_page_warnings_notify_waiting_busy();
 	}
 }
 
