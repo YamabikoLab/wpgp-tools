@@ -1,3 +1,7 @@
+/*
+ * 翻訳画面の検査結果、編集操作、および拡張機能の表示を整える。
+ * 保存しない検査の操作と鮮度通知も既存の画面に統合する。
+ */
 /* ToDo: Remove !important and load stylesheet in the footer */
 .fadeOut {
     visibility: hidden;
