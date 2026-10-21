@@ -112,6 +112,7 @@ function wpgpt_editor_init( translation_e_id, translation_p_id ) {
 		wpgpt_update_manual_check_freshness( editor );
 	} );
 
+	// 警告を許容するかどうかは、保存や承認を選ぶ利用者の操作でのみ切り替える。
 	const new_approve_with_warnings = approve_with_warnings.cloneNode( true );
 	new_approve_with_warnings.querySelector( 'input' ).addEventListener( 'click', ( ev ) => { wpgpt_next_is_strict = ! ( ev.target.checked ); } );
 	$wpgpt_addElement( `${translation_e_id} .translation-wrapper`, 'afterend', new_approve_with_warnings );
@@ -191,6 +192,13 @@ function wpgpt_update_manual_check_freshness( editor ) {
 	status.hidden = previous.length === current.length && previous.every( ( value, index ) => value === current[ index ] );
 }
 
+/**
+ * 保存・承認時には警告の有無を判定し、保存済み訳文の表示も従来どおり更新する。
+ *
+ * @param {string} translation_e_id 検査する訳文の編集画面の選択子。
+ * @param {string} translation_p_id 対応する保存済み訳文の選択子。
+ * @returns {boolean} 警告がなく、通常の保存操作を続けられる場合に true。
+ */
 function wpgpt_check_this_translation( translation_e_id, translation_p_id ) {
 	const thisTranslation = {
 		has_notice:     false,
@@ -223,6 +231,7 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 		return;
 	}
 
+	// 再検査では古い指摘と新しい指摘を重複表示せず、前回の結果全体を置き換える。
 	const editor_check_results = editor.querySelector( '.meta .wpgpt-checks-list' );
 	editor_check_results &&	editor_check_results.parentNode.replaceChild( thisTranslation.check_results, editor_check_results );
 	( !	editor_check_results ) && editor.querySelector( '.meta dl' ).insertAdjacentElement( 'beforebegin', thisTranslation.check_results );
@@ -250,6 +259,7 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 	preview.classList.remove( 'wpgpt-has-warning', 'wpgpt-has-notice', 'wpgpt-has-nothing' );
 	preview.classList.add( thisTranslation.preview_class );
 
+	// 保存済み訳文の状態表示は、過去の結果があれば置換し、初回だけ新設する。
 	const check_status = preview.querySelector( '.wpgpt-check-preview' );
 	check_status && check_status.parentNode.replaceChild( thisTranslation.preview_status, check_status );
 	( ! check_status ) && preview.querySelector( '.actions .action.edit' ).insertAdjacentElement( 'afterbegin', thisTranslation.preview_status );
@@ -269,8 +279,13 @@ function wpgpt_display_check_results( translation_e_id, translation_p_id, thisTr
 	wpgpt_filters();
 }
 
+/**
+ * 画面の部分更新で後から追加される訳文にも、通常の編集操作と検査を提供する。
+ * 対象は追加された編集画面だけとし、既存行を再走査しない。
+ */
 function wpgpt_mutations() {
 	const observer = new MutationObserver( ( mutations ) => {
+		// 複数の画面更新が通知された場合も、各更新に含まれる新しい編集画面だけを対象とする。
 		mutations.forEach( ( mutation ) => {
 			// ページ更新で新しく現れた編集画面にも、既存行と同じ保存前検査を提供する。
 			mutation.addedNodes.forEach( ( el ) => {
@@ -280,6 +295,7 @@ function wpgpt_mutations() {
 				}
 				wpgpt_editor_init( `#${el.id}`, `#${el.id.replace( 'editor', 'preview' )}` );
 				wpgpt_check_this_translation( `#${el.id}`, `#${el.id.replace( 'editor', 'preview' )}` );
+				// 履歴表示が無効な画面でも、保存前検査と Check は必要なため先に初期化する。
 				if (
 					'disabled' === wpgpt_settings.history_main.state ||
 					( document.location.href.includes( 'historypage' ) && 'disabled' === wpgpt_settings.history_page.state )
