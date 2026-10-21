@@ -8,6 +8,10 @@ WPGP Tools for Japanese (YamabikoLab) は、WordPress の日本語翻訳作業�
 - **[Chrome ウェブストアからインストール](https://chromewebstore.google.com/detail/wpgp-tools-for-japanese-y/ilclhahfffhabdbeadpapfdmghgkejml)**
 - **[📖 インストールと初期設定ガイド（日本語）](docs/setup-ja.md)**
 
+### 保存しない翻訳チェック
+
+翻訳の個別編集画面で Save の左にある **Check** を押すと、保存せずに現在入力されている訳文の一般チェック・日本語翻訳チェックを実行できます。翻訳が未変更でも検査でき、複数形も確認します。チェック後に訳文を変更すると再検査を促します。日本語チェックは既存の「Japanese checks」設定に従い、保存済み翻訳の状態は Check では変わりません。
+
 ### 複数 Waiting 提案の検索
 
 翻訳セットのページにある「複数 Waiting を検索」を押すと、全翻訳者の Waiting 提案を元タブ内で逐次調べ、同じ原文 ID に異なる翻訳 ID が2件以上ある原文を表示します。Warning が0件の原文も対象となり、「Warning ありのみ」で表示を切り替えられます。各原文の「個別比較」では、最新の対象提案を元タブから再取得して、既存の読み取り専用比較タブに表示します。

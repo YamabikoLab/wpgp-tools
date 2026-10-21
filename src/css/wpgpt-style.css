@@ -1,3 +1,7 @@
+/*
+ * 翻訳画面の検査結果、編集操作、および拡張機能の表示を整える。
+ * 保存しない検査の操作と鮮度通知も既存の画面に統合する。
+ */
 /* ToDo: Remove !important and load stylesheet in the footer */
 .fadeOut {
     visibility: hidden;
@@ -850,4 +854,15 @@ button.choose-consistency-string {
     background: #e9f5fa;
     font-size: 12px;
     font-weight: 600;
+}
+
+/* 編集中の訳文を保存せずに検査する操作と結果の鮮度表示。 */
+.wpgpt-manual-check {
+    margin-right: 6px;
+    cursor: pointer;
+}
+.wpgpt-manual-check-stale {
+    color: #a33c00;
+    font-weight: 600;
+    margin: 8px 0;
 }
