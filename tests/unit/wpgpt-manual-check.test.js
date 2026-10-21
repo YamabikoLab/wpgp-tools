@@ -70,7 +70,7 @@ function fixture() {
 function load( f ) {
 	const context = vm.createContext( {
 		document: f.document,
-		window: { location: { pathname: '/projects/test/ja/default/' } },
+		window: { location: { pathname: '/projects/test/ja/default/' }, addEventListener() {} },
 		wpgpt_settings: { custom_period: { state: '' }, checks_labels: { state: 'disabled' } },
 		wpgpt_us_assets: { wpgpt_warning_icon: '', wpgpt_notice_icon: '' },
 		$wpgpt_createElement: () => element(),
