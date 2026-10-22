@@ -134,6 +134,8 @@ Check は現在の入力内容に対して、既存の一般チェックと日�
 >
 > Check には専用の設定はありません。一般チェック・日本語チェックは **WPGPT Settings** の既存の有効・無効および Warning / Notice 設定に従います。日本語チェックを利用するには、上記の **Japanese checks：Yes** を設定してください。
 
+<img width="1870" height="690" alt="check" src="https://github.com/user-attachments/assets/d4219154-6cd8-4001-aca0-df2249c17a98" />
+
 ## 5. 全件 Warning チェック
 
 WPGP Tools には、翻訳セット全体を対象として Warning をまとめて確認する機能があります。
